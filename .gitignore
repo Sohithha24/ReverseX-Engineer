@@ -1,0 +1,54 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+!.env*.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# Local runtime / backups / diagnostics
+artifacts/**
+!artifacts/.gitkeep
+!artifacts/demo/
+!artifacts/demo/**
+artifacts/demo/**/screenshots/
+artifacts/phase4b/backup/
+*.log
+*.sqlite
+*.db
+.tmp/
+tmp/
+backups/
+local_backups/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Playwright / browser caches (local)
+playwright-report/
+test-results/

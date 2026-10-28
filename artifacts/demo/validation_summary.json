@@ -1,0 +1,42 @@
+{
+  "note": "Sanitized demo excerpt for GitHub. Full local artifacts remain excluded.",
+  "source_phase": "phase3",
+  "behavioral_match_rate_percent": 100.0,
+  "passed": 5,
+  "failed": 0,
+  "invalid": 0,
+  "total_valid": 5,
+  "tests": [
+    {
+      "test_id": "empty_input_validation",
+      "status": "pass",
+      "description": "Submit empty task name; compare validation visibility",
+      "differences": []
+    },
+    {
+      "test_id": "valid_task_creation",
+      "status": "pass",
+      "description": "Create a fresh holdout task and compare visibility",
+      "differences": []
+    },
+    {
+      "test_id": "persistence_after_reload",
+      "status": "pass",
+      "description": "Create holdout task, reload, compare persistence",
+      "differences": []
+    },
+    {
+      "test_id": "multiple_task_creation",
+      "status": "pass",
+      "description": "Create two distinct holdout tasks; compare both visible",
+      "differences": []
+    },
+    {
+      "test_id": "whitespace_input",
+      "status": "pass",
+      "description": "Submit whitespace-only name; compare observable outcomes without assumed oracle rule",
+      "differences": []
+    }
+  ],
+  "isolation_mode": "docker_nginx_readonly_bridge"
+}

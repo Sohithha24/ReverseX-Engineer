@@ -1,0 +1,127 @@
+{
+  "excluded_from_model_context": [
+    "sample_app/**",
+    "sample_app/index.html",
+    "sample_app/style.css",
+    "sample_app/app.js",
+    "Any original HTML/CSS/JS implementation files",
+    "Repository credentials and .env"
+  ],
+  "feature": "Add task / TaskBoard visible behavior",
+  "global_uncertainties": [
+    "UI chrome, styling, and exact labels beyond observed visible_text are not required.",
+    "Only behaviors evidenced in the investigation report are observation requirements.",
+    "sample_app source must not be used as reconstruction input."
+  ],
+  "phase": "2",
+  "project": "ReverseX Engineer",
+  "requirements": [
+    {
+      "action_performed": "click on element s1_e1",
+      "evidence": [
+        {
+          "note": "step 1: after click, page showed validation text",
+          "objective_key": "empty_task_submission",
+          "report_path": "artifacts/phase1b/report.json  # path sanitized for public demo",
+          "step": 1
+        }
+      ],
+      "feature": "add_task",
+      "id": "REQ-EMPTY-SUBMIT",
+      "input_values": {
+        "task_name": null
+      },
+      "kind": "observation",
+      "observed_result": "After the action, visible text included validation message \"Task name is required.\" and the empty-state remained.",
+      "preconditions": [
+        "Page shows a task name input and an Add task control.",
+        "Task list shows empty-state text (observed: \"No tasks yet.\").",
+        "No non-empty task name was filled in this attempt before the submit click."
+      ],
+      "uncertainties": [
+        "Exact input widget type beyond snapshot kind=input is not asserted.",
+        "Whether whitespace-only names are rejected was not separately tested."
+      ]
+    },
+    {
+      "action_performed": "fill value then click on s3_e1",
+      "evidence": [
+        {
+          "note": "fill with non-empty task name",
+          "objective_key": "valid_task_submission",
+          "report_path": "artifacts/phase1b/report.json  # path sanitized for public demo",
+          "step": 2
+        },
+        {
+          "note": "step 3: after click, task text was visible",
+          "objective_key": "valid_task_submission",
+          "report_path": "artifacts/phase1b/report.json  # path sanitized for public demo",
+          "step": 3
+        }
+      ],
+      "feature": "add_task",
+      "id": "REQ-VALID-CREATE",
+      "input_values": {
+        "task_name": "Review PR"
+      },
+      "kind": "observation",
+      "observed_result": "After submit, visible text included the task name \"Review PR\" under the task list and no longer showed \"No tasks yet.\"",
+      "preconditions": [
+        "A non-empty task name can be entered into the visible text input.",
+        "Task name used in investigation: \"Review PR\"."
+      ],
+      "uncertainties": [
+        "Maximum task name length was not observed in this investigation.",
+        "Duplicate-task behavior was not observed."
+      ]
+    },
+    {
+      "action_performed": "reload",
+      "evidence": [
+        {
+          "note": "step 4: after reload, task text remained visible",
+          "objective_key": "reload_persistence",
+          "report_path": "artifacts/phase1b/report.json  # path sanitized for public demo",
+          "step": 4
+        }
+      ],
+      "feature": "add_task",
+      "id": "REQ-RELOAD-PERSIST",
+      "input_values": {},
+      "kind": "observation",
+      "observed_result": "After reload, visible text still included \"Review PR\".",
+      "preconditions": [
+        "A task named \"Review PR\" was visible in the list before reload."
+      ],
+      "uncertainties": [
+        "Persistence mechanism (e.g. memory, localStorage, cookie, server) was NOT observed.",
+        "Cross-tab or cross-browser persistence was not tested."
+      ]
+    },
+    {
+      "action_performed": "(none \u2014 interpretive note)",
+      "evidence": [
+        {
+          "note": "persistence observed; mechanism unknown",
+          "objective_key": "reload_persistence",
+          "report_path": "artifacts/phase1b/report.json  # path sanitized for public demo",
+          "step": 4
+        }
+      ],
+      "feature": "add_task",
+      "id": "HYP-STORAGE-UNKNOWN",
+      "input_values": {},
+      "kind": "hypothesis",
+      "observed_result": "Hypothesis only: some client- or server-side retention exists. No storage API, network write, or file write was observed in Phase 1B.",
+      "preconditions": [
+        "A task survives page reload in the same browser context."
+      ],
+      "uncertainties": [
+        "Do not treat any specific storage technology as a requirement."
+      ]
+    }
+  ],
+  "source_report": "C:/Users/sohit/Downloads/ReverseX_Engineer_Phase1a_Starter/reversex-engineer-starter/artifacts/phase1b/report.json",
+  "source_report_sha256": "3df59b7adde1ff8d4c77a451e29852d9f34313a9d2217c4c745168754f33ba01",
+  "status": "frozen"
+}

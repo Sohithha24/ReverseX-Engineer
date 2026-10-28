@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TaskBoard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>TaskBoard</h1>
+    <form id="task-form" novalidate>
+      <div class="form-row">
+        <label for="task-name">Task name</label>
+        <input id="task-name" name="task-name" type="text" autocomplete="off" placeholder="Enter task name" />
+        <button type="submit" id="add-task">Add task</button>
+      </div>
+      <p id="error" class="error" hidden>Task name is required.</p>
+    </form>
+    <section aria-label="Task list">
+      <h2>Tasks</h2>
+      <p id="empty-state">No tasks yet.</p>
+      <ul id="task-list"></ul>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

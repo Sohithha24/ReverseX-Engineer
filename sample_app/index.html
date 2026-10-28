@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ReverseX Fixture · TaskBoard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header><span class="eyebrow">ORIGINAL APP · AUTHORIZED TEST TARGET</span><h1>TaskBoard</h1><p>A deliberately small application for behavioral investigation.</p></header>
+    <section class="card" aria-label="Create task">
+      <h2>Create a task</h2>
+      <label for="task-name">Task name</label>
+      <form id="task-form" novalidate>
+        <input id="task-name" name="taskName" placeholder="e.g. Review PR" autocomplete="off" />
+        <button id="add-task" type="submit">Add task</button>
+      </form>
+      <p id="error" class="error" role="alert" aria-live="polite"></p>
+    </section>
+    <section class="card" aria-label="Task list"><h2>Your tasks</h2><ul id="task-list"></ul><p id="empty" class="muted">No tasks yet.</p></section>
+    <footer>Made for ReverseX's authorized black-box exploration demo.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
