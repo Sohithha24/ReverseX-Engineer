@@ -8,8 +8,9 @@
 | Visibility | **PRIVATE** |
 | Default branch | `main` |
 | Git initialization | New local repository initialized (no prior `.git`) |
-| Latest commit hash | `3d10e3458a80c5ac4c6f752e82c80b1386ea3348` |
-| Remote HEAD | Matches local initial commit |
+| Initial commit hash | `3d10e3458a80c5ac4c6f752e82c80b1386ea3348` |
+| Latest commit hash | `48920a74b3b86690c6b8213d66a895593c28b0ed` (includes this report) |
+| Remote HEAD | Matches local `main` |
 | Push | Verified (`origin/main` tracking) |
 
 ## Local preservation
