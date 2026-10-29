@@ -13,6 +13,7 @@ from typing import Any, Callable, Literal
 from reversex.evidence_graph import build_evidence_graph, export_evidence_graph
 from reversex.run import explore
 from reversex.spec import generate_and_freeze_spec, load_frozen_spec
+from reversex.targets import get_target
 
 ROOT = Path(__file__).resolve().parents[1]
 PHASE2_RECON = ROOT / 'artifacts' / 'phase2' / 'reconstructed-app'
@@ -55,8 +56,10 @@ def run_pipeline(
     max_actions: int,
     artifacts_root: Path,
     status_cb: Callable[[JobStatus, dict[str, Any]], None] | None = None,
+    target_id: str = 'taskboard',
 ) -> dict[str, Any]:
     """Execute connected workflow. Never marks unexecuted stages successful."""
+    target = get_target(target_id)
     job_dir = artifacts_root / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     stages: dict[str, Any] = {}
@@ -67,29 +70,38 @@ def run_pipeline(
         if status_cb:
             status_cb(status, payload)
 
+    def done(status: JobStatus) -> dict[str, Any]:
+        return _finalize(job_id, job_dir, status, stages, errors, mode, pipeline, target.id)
+
     # --- Stage 1: investigation ---
     set_status('investigating')
     inv_dir = job_dir / 'investigation'
     try:
-        report = explore(mode, output_dir=str(inv_dir), max_actions=max_actions)
+        report = explore(
+            mode,
+            output_dir=str(inv_dir),
+            max_actions=max_actions,
+            target_id=target.id,
+        )
         stages['investigation'] = {
             'executed': True,
             'status': report.get('status'),
             'artifact': f'{job_id}/investigation/report.json',
             'duration_seconds': report.get('duration_seconds'),
             'api_request_count': report.get('api_request_count', 0),
+            'target_id': target.id,
         }
         if report.get('status') not in ('completed', 'incomplete', 'budget_exhausted'):
             # explore uses completed/incomplete/budget_exhausted/error
             if report.get('status') == 'error':
                 errors.append('investigation ended with error')
                 set_status('failed', {'stages': stages, 'errors': errors})
-                return _finalize(job_id, job_dir, 'failed', stages, errors, mode, pipeline)
+                return done('failed')
     except Exception as exc:
         stages['investigation'] = {'executed': True, 'status': 'failed', 'error': str(exc)[:300]}
         errors.append(str(exc)[:300])
         set_status('failed', {'stages': stages, 'errors': errors})
-        return _finalize(job_id, job_dir, 'failed', stages, errors, mode, pipeline)
+        return done('failed')
 
     if pipeline == 'investigate_only':
         final = 'completed' if stages['investigation']['status'] == 'completed' else 'incomplete'
@@ -102,7 +114,7 @@ def run_pipeline(
             validation_results=job_dir / 'missing_val.json',
         )
         export_evidence_graph(graph, job_dir / 'evidence_graph.json')
-        return _finalize(job_id, job_dir, final, stages, errors, mode, pipeline)
+        return done(final)
 
     # --- Stage 2: specification ---
     set_status('specifying', {'stages': stages})
@@ -119,13 +131,19 @@ def run_pipeline(
         stages['specification'] = {'executed': True, 'status': 'failed', 'error': str(exc)[:300]}
         errors.append(str(exc)[:300])
         set_status('failed', {'stages': stages, 'errors': errors})
-        return _finalize(job_id, job_dir, 'failed', stages, errors, mode, pipeline)
+        return done('failed')
 
     # --- Stage 3: reconstruction ---
     set_status('reconstructing', {'stages': stages})
     recon_dir = job_dir / 'reconstructed-app'
     try:
-        if reuse_reconstruction and (PHASE2_RECON / 'index.html').is_file():
+        # Reuse is TaskBoard Phase-2 only; never reuse TaskBoard recon for calculator.
+        can_reuse = (
+            reuse_reconstruction
+            and target.id == 'taskboard'
+            and (PHASE2_RECON / 'index.html').is_file()
+        )
+        if can_reuse:
             copied = _safe_copy_tree(PHASE2_RECON, recon_dir)
             # Do not modify/overwrite the Phase 2 source directory; only copy into job dir.
             stages['reconstruction'] = {
@@ -138,14 +156,13 @@ def run_pipeline(
             }
         else:
             from reversex.reconstruct import run_reconstruction
-            from reversex.preview import prepare_preview
 
             sha = (spec_dir / 'behavior_spec.sha256').read_text(encoding='utf-8').strip()
             frozen = load_frozen_spec(spec_dir / 'behavior_spec.frozen.json', expected_sha256=sha)
             result = run_reconstruction(
                 frozen,
                 output_dir=recon_dir,
-                sample_app_dir=ROOT / 'sample_app',
+                sample_app_dir=target.fixture_dir,
                 preview_fn=lambda _d: {'status': 'deferred', 'reason': 'preview deferred to validation stage'},
             )
             stages['reconstruction'] = {
@@ -160,7 +177,7 @@ def run_pipeline(
         stages['reconstruction'] = {'executed': True, 'status': 'failed', 'error': str(exc)[:300]}
         errors.append(str(exc)[:300])
         set_status('failed', {'stages': stages, 'errors': errors})
-        return _finalize(job_id, job_dir, 'failed', stages, errors, mode, pipeline)
+        return done('failed')
 
     # --- Stage 4: validation ---
     set_status('validating', {'stages': stages})
@@ -171,7 +188,8 @@ def run_pipeline(
         validation = run_phase3_validation(
             reconstructed_dir=recon_dir,
             output_dir=val_dir,
-            original_origin='http://127.0.0.1:8001',
+            original_origin=target.origin,
+            suite=target.validation_suite,
         )
         stages['validation'] = {
             'executed': True,
@@ -184,6 +202,7 @@ def run_pipeline(
             'behavioral_match_rate_percent': validation.behavioral_match_rate_percent,
             'isolation': validation.isolation,
             'meta_api_requests': validation.meta_api_requests,
+            'suite': target.validation_suite,
         }
         if validation.behavioral_match_rate_percent is None:
             errors.append('validation blocked or unavailable')
@@ -199,7 +218,54 @@ def run_pipeline(
         stages['validation'] = {'executed': True, 'status': 'failed', 'error': str(exc)[:300]}
         errors.append(str(exc)[:300])
         set_status('failed', {'stages': stages, 'errors': errors})
-        return _finalize(job_id, job_dir, 'failed', stages, errors, mode, pipeline)
+        return done('failed')
+
+    # --- Stage 5: bounded repair (only when real validation failures exist) ---
+    repair_report_path = job_dir / 'repair' / 'repair_report.json'
+    if (
+        stages.get('validation', {}).get('status') == 'completed'
+        and int(stages['validation'].get('failed') or 0) > 0
+    ):
+        try:
+            from reversex.repair import run_bounded_repair
+
+            repair = run_bounded_repair(
+                output_root=job_dir / 'repair',
+                frozen_spec_path=spec_dir / 'behavior_spec.frozen.json',
+                initial_recon_dir=recon_dir,
+                initial_validation=validation,
+                target=target,
+                evaluation_kind='pipeline_repair',
+                label='Pipeline bounded repair after differential validation failures',
+            )
+            stages['repair'] = {
+                'executed': True,
+                'status': repair.stopped_reason,
+                'evaluation_kind': repair.evaluation_kind,
+                'attempts': len(repair.attempts),
+                'initial_match_rate_percent': repair.initial_match_rate_percent,
+                'final_match_rate_percent': repair.final_match_rate_percent,
+                'meta_api_requests': repair.meta_api_requests_total,
+                'artifact': f'{job_id}/repair/repair_report.json',
+                'best_candidate_dir': repair.best_candidate_dir,
+            }
+            if repair.final_match_rate_percent == 100.0:
+                final_status = 'completed'
+                set_status('completed', {'stages': stages})
+            else:
+                final_status = 'incomplete'
+                set_status('incomplete', {'stages': stages, 'errors': errors})
+        except Exception as exc:
+            stages['repair'] = {'executed': True, 'status': 'failed', 'error': str(exc)[:300]}
+            errors.append(f'repair: {exc!s}'[:300])
+            set_status('incomplete', {'stages': stages, 'errors': errors})
+            final_status = 'incomplete'
+    else:
+        stages['repair'] = {
+            'executed': False,
+            'status': 'skipped',
+            'note': 'No failed validation scenarios — repair not invoked',
+        }
 
     graph = build_evidence_graph(
         root=ROOT,
@@ -207,9 +273,10 @@ def run_pipeline(
         behavior_spec=spec_dir / 'behavior_spec.frozen.json',
         reconstruction_dir=recon_dir,
         validation_results=val_dir / 'validation_results.json',
+        repair_report=repair_report_path if repair_report_path.is_file() else None,
     )
     export_evidence_graph(graph, job_dir / 'evidence_graph.json')
-    return _finalize(job_id, job_dir, final_status, stages, errors, mode, pipeline)
+    return done(final_status)
 
 
 def _finalize(
@@ -220,12 +287,14 @@ def _finalize(
     errors: list[str],
     mode: str,
     pipeline: str,
+    target_id: str = 'taskboard',
 ) -> dict[str, Any]:
     summary = {
         'id': job_id,
         'status': status,
         'mode': mode,
         'pipeline': pipeline,
+        'target_id': target_id,
         'updated_at': _utc(),
         'stages': stages,
         'errors': errors,

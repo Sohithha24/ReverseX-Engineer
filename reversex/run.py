@@ -8,10 +8,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from reversex.browser import SafeBrowser
 from reversex.contracts import Action, Decision
+from reversex.targets import AppTarget, get_target
 
 DEFAULT_ORIGIN = 'http://127.0.0.1:8001'
 
-# Investigation objectives inferred only from recorded browser observations.
+# Default TaskBoard keys (kept for existing unit tests).
 OBJECTIVE_KEYS = (
     'empty_task_submission',
     'valid_task_submission',
@@ -20,10 +21,12 @@ OBJECTIVE_KEYS = (
 
 _VALIDATION_RE = re.compile(r'task name is required', re.IGNORECASE)
 _EMPTY_HINT_RE = re.compile(r'no tasks yet', re.IGNORECASE)
+_CALC_EMPTY_RE = re.compile(r'(both numbers are required|required|enter|empty|missing|invalid)', re.I)
+_NUMERIC_RE = re.compile(r'^-?\d+(?:\.\d+)?$')
 
 
 def scripted_decision(snapshot, step: int):
-    """Deterministic smoke test only. NOT an autonomous AI agent."""
+    """Deterministic TaskBoard smoke test only. NOT an autonomous AI agent."""
     task = next((el.element_id for el in snapshot.elements if el.kind == 'input'), None)
     add = next((el.element_id for el in snapshot.elements if el.kind == 'button' and 'add task' in el.label.lower()), None)
     if step == 0 and task:
@@ -37,6 +40,32 @@ def scripted_decision(snapshot, step: int):
     if step == 4:
         return Decision(action='reload', reason='Offline scripted persistence check')
     return Decision(action='stop', reason='Offline scripted tests finished')
+
+
+def scripted_calculator_decision(snapshot, step: int):
+    """Deterministic calculator smoke test only. NOT an autonomous AI agent."""
+    inputs = [el for el in snapshot.elements if el.kind == 'input']
+    buttons = {el.label.lower(): el.element_id for el in snapshot.elements if el.kind == 'button'}
+    add = buttons.get('add')
+    sub = buttons.get('subtract')
+    reset = buttons.get('reset')
+    if step == 0 and add:
+        return Decision(action='click', element_id=add, reason='Offline scripted empty add')
+    if step == 1 and len(inputs) >= 2:
+        return Decision(action='fill', element_id=inputs[0].element_id, value='4', reason='Offline fill A')
+    if step == 2 and len(inputs) >= 2:
+        return Decision(action='fill', element_id=inputs[1].element_id, value='2', reason='Offline fill B')
+    if step == 3 and add:
+        return Decision(action='click', element_id=add, reason='Offline add')
+    if step == 4 and len(inputs) >= 2:
+        return Decision(action='fill', element_id=inputs[0].element_id, value='9', reason='Offline fill A sub')
+    if step == 5 and len(inputs) >= 2:
+        return Decision(action='fill', element_id=inputs[1].element_id, value='3', reason='Offline fill B sub')
+    if step == 6 and sub:
+        return Decision(action='click', element_id=sub, reason='Offline subtract')
+    if step == 7 and reset:
+        return Decision(action='click', element_id=reset, reason='Offline reset')
+    return Decision(action='stop', reason='Offline calculator scripted finished')
 
 
 def _visible(event: dict, which: str) -> str:
@@ -59,12 +88,18 @@ def _filled_values_before_submit(events: list[dict], upto: int) -> list[str]:
     return values
 
 
-def evaluate_objectives(events: list[dict]) -> dict:
-    """Derive which investigation goals have observation-backed evidence.
+def _button_label_for_click(event: dict) -> str:
+    decision = event.get('decision') or {}
+    eid = decision.get('element_id')
+    before = event.get('before') or {}
+    for el in before.get('elements') or []:
+        if el.get('element_id') == eid:
+            return str(el.get('label') or '').lower()
+    return ''
 
-    Only uses recorded before/after visible text and executed decisions.
-    Never invents outcomes the browser did not show.
-    """
+
+def evaluate_taskboard_objectives(events: list[dict]) -> dict:
+    """Derive TaskBoard investigation goals from recorded browser observations."""
     objectives = {
         'empty_task_submission': {
             'supported': False,
@@ -95,13 +130,11 @@ def evaluate_objectives(events: list[dict]) -> dict:
         if action == 'click':
             fills = _filled_values_before_submit(events, idx)
             last_fill = fills[-1] if fills else None
-            # Empty submission: click Add with no non-empty fill in this attempt.
             if (last_fill is None or last_fill.strip() == '') and _VALIDATION_RE.search(after):
                 objectives['empty_task_submission'] = {
                     'supported': True,
                     'evidence': f'step {event.get("step")}: after click, page showed validation text',
                 }
-            # Valid submission: non-empty fill then click; task text appears and empty-state gone.
             if last_fill and last_fill.strip():
                 name = last_fill.strip()
                 if name in after and not _EMPTY_HINT_RE.search(after):
@@ -122,6 +155,97 @@ def evaluate_objectives(events: list[dict]) -> dict:
     return objectives
 
 
+def evaluate_calculator_objectives(events: list[dict]) -> dict:
+    """Observation-backed calculator goals — does not assume arithmetic answers."""
+    objectives = {
+        'empty_input_handling': {'supported': False, 'evidence': None},
+        'addition_operation': {'supported': False, 'evidence': None, 'operands': None},
+        'subtraction_operation': {'supported': False, 'evidence': None, 'operands': None},
+        'reset_behavior': {'supported': False, 'evidence': None},
+        'negative_number_handling': {'supported': False, 'evidence': None, 'operands': None},
+    }
+    had_result_text = False
+    last_numeric_operands: list[str] = []
+
+    for idx, event in enumerate(events):
+        if event.get('status') != 'ok':
+            continue
+        decision = event.get('decision') or {}
+        action = decision.get('action')
+        before = _visible(event, 'before')
+        after = _visible(event, 'after')
+        if action != 'click' or not after:
+            continue
+
+        label = _button_label_for_click(event)
+        fills = [v.strip() for v in _filled_values_before_submit(events, idx)]
+        numeric_fills = [v for v in fills if _NUMERIC_RE.match(v)]
+        if len(numeric_fills) >= 2:
+            last_numeric_operands = numeric_fills[-2:]
+        # Operand values often remain in the UI after a prior operation click; allow
+        # using the last observed numeric pair when the model clicks another op without re-filling.
+        operands = numeric_fills[-2:] if len(numeric_fills) >= 2 else list(last_numeric_operands)
+        emptyish = (not fills) and not last_numeric_operands
+
+        if (emptyish or (fills and all(not v for v in fills))) and _CALC_EMPTY_RE.search(after):
+            objectives['empty_input_handling'] = {
+                'supported': True,
+                'evidence': f'step {event.get("step")}: empty/incomplete inputs produced a required/empty message',
+            }
+
+        trailing_nums = re.findall(r'-?\d+(?:\.\d+)?', after)
+        showed_result = bool(trailing_nums) and after != before and not _CALC_EMPTY_RE.search(after)
+
+        if 'add' in label and len(operands) >= 2 and showed_result:
+            objectives['addition_operation'] = {
+                'supported': True,
+                'evidence': f'step {event.get("step")}: Add click changed visible output after numeric fills',
+                'operands': operands,
+            }
+            had_result_text = True
+            if any(v.startswith('-') for v in operands):
+                objectives['negative_number_handling'] = {
+                    'supported': True,
+                    'evidence': f'step {event.get("step")}: negative operand used with Add',
+                    'operands': operands,
+                }
+
+        if 'subtract' in label and len(operands) >= 2 and showed_result:
+            objectives['subtraction_operation'] = {
+                'supported': True,
+                'evidence': f'step {event.get("step")}: Subtract click changed visible output after numeric fills',
+                'operands': operands,
+            }
+            had_result_text = True
+            if any(v.startswith('-') for v in operands):
+                objectives['negative_number_handling'] = {
+                    'supported': True,
+                    'evidence': f'step {event.get("step")}: negative operand used with Subtract',
+                    'operands': operands,
+                }
+
+        if 'reset' in label:
+            before_has_result = bool(re.search(r'-?\d+(?:\.\d+)?', before)) or had_result_text
+            if before_has_result or 'result' in before.lower():
+                prev_nums = set(re.findall(r'-?\d+(?:\.\d+)?', before))
+                after_nums = set(re.findall(r'-?\d+(?:\.\d+)?', after))
+                if not prev_nums.issubset(after_nums) or after != before:
+                    objectives['reset_behavior'] = {
+                        'supported': True,
+                        'evidence': f'step {event.get("step")}: Reset click altered/cleared visible calculator state',
+                    }
+            last_numeric_operands = []
+
+    return objectives
+
+
+def evaluate_objectives(events: list[dict], target: AppTarget | None = None) -> dict:
+    profile = target or get_target('taskboard')
+    if profile.id == 'calculator':
+        return evaluate_calculator_objectives(events)
+    return evaluate_taskboard_objectives(events)
+
+
 def finalize_status(
     *,
     events: list[dict],
@@ -129,6 +253,7 @@ def finalize_status(
     stopped: bool,
     budget_hit: bool,
     errored: bool,
+    objective_keys: tuple[str, ...] | None = None,
 ) -> str:
     """Map run outcome to a clear status.
 
@@ -141,7 +266,8 @@ def finalize_status(
         return 'error'
     if budget_hit and not stopped:
         return 'budget_exhausted'
-    all_supported = all(objectives[key]['supported'] for key in OBJECTIVE_KEYS)
+    keys = objective_keys or OBJECTIVE_KEYS
+    all_supported = all((objectives.get(key) or {}).get('supported') for key in keys)
     if stopped and all_supported:
         return 'completed'
     if stopped:
@@ -151,16 +277,26 @@ def finalize_status(
     return 'incomplete'
 
 
-def explore(mode: str, url: str | None = None, output_dir: str = 'artifacts', max_actions: int = 12):
+def explore(
+    mode: str,
+    url: str | None = None,
+    output_dir: str = 'artifacts',
+    max_actions: int = 12,
+    target_id: str | None = None,
+):
     load_dotenv()
     from reversex.browser import validate_target
     if mode not in ('scripted', 'muse'):
         raise ValueError('mode must be scripted or muse')
     if max_actions < 1 or max_actions > 20:
         raise ValueError('max_actions must be between 1 and 20')
-    origin = os.getenv('REVERSEX_ALLOWED_ORIGIN', DEFAULT_ORIGIN)
-    target = url or origin
-    validate_target(target, origin)
+    target = get_target(target_id)
+    origin = target.origin
+    # Optional env override only when investigating the default taskboard target.
+    if target.id == 'taskboard':
+        origin = os.getenv('REVERSEX_ALLOWED_ORIGIN', origin)
+    dest = url or origin
+    validate_target(dest, origin)
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     history: list[dict] = []
@@ -170,23 +306,32 @@ def explore(mode: str, url: str | None = None, output_dir: str = 'artifacts', ma
     errored = False
     api_requests = 0
     planner = None
+    wall_budget = 180 if max_actions > 12 else 90
     try:
         if mode == 'muse':
             from reversex.meta import MusePlanner
-            planner = MusePlanner()
+            planner = MusePlanner(target=target)
         with SafeBrowser(origin) as browser:
-            snapshot = browser.goto(target)
+            snapshot = browser.goto(dest)
             try:
                 browser.screenshot(str(output / 'original.png'))
             except Exception as exc:
                 history.append({'status': 'screenshot_error', 'phase': 'original', 'error': str(exc)[:240]})
             for step in range(max_actions):
-                if time.monotonic() - started > 90:
-                    history.append({'status': 'budget_exhausted', 'error': '90-second wall-clock budget reached'})
+                if time.monotonic() - started > wall_budget:
+                    history.append({
+                        'status': 'budget_exhausted',
+                        'error': f'{wall_budget}-second wall-clock budget reached',
+                    })
                     budget_hit = True
                     break
                 try:
-                    decision = planner.decide(snapshot, history) if planner else scripted_decision(snapshot, step)
+                    if planner:
+                        decision = planner.decide(snapshot, history)
+                    elif target.id == 'calculator':
+                        decision = scripted_calculator_decision(snapshot, step)
+                    else:
+                        decision = scripted_decision(snapshot, step)
                     if planner is not None:
                         api_requests = planner.request_count
                     record = {
@@ -223,20 +368,23 @@ def explore(mode: str, url: str | None = None, output_dir: str = 'artifacts', ma
         if planner is not None:
             api_requests = getattr(planner, 'request_count', api_requests)
 
-    objectives = evaluate_objectives(history)
+    objectives = evaluate_objectives(history, target=target)
     final_status = finalize_status(
         events=history,
         objectives=objectives,
         stopped=stopped,
         budget_hit=budget_hit,
         errored=errored,
+        objective_keys=target.objective_keys,
     )
     report = {
         'project': 'ReverseX Engineer',
         'mode': mode,
+        'target_id': target.id,
+        'feature': target.feature_label,
         'note': ('Offline scripted browser smoke test — not AI-led investigation' if mode == 'scripted'
                  else 'Live Muse Spark requested; review event logs to verify model behavior'),
-        'target': target,
+        'target': dest,
         'status': final_status,
         'duration_seconds': round(time.monotonic() - started, 2),
         'max_actions': max_actions,
@@ -253,10 +401,11 @@ def main():
     parser = argparse.ArgumentParser(description='ReverseX Engineer Phase 1b browser explorer')
     parser.add_argument('--mode', choices=['scripted', 'muse'], default='scripted')
     parser.add_argument('--url', default=None)
+    parser.add_argument('--target', default='taskboard', choices=['taskboard', 'calculator'])
     parser.add_argument('--max-actions', type=int, default=12)
     parser.add_argument('--output-dir', default='artifacts')
     args = parser.parse_args()
-    report = explore(args.mode, args.url, args.output_dir, args.max_actions)
+    report = explore(args.mode, args.url, args.output_dir, args.max_actions, target_id=args.target)
     summary = {k: v for k, v in report.items() if k != 'events'}
     print(json.dumps(summary, indent=2))
     print(f"Steps recorded: {len(report['events'])}. Full report: {args.output_dir}/report.json")

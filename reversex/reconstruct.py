@@ -64,9 +64,9 @@ RECONSTRUCTION_SCHEMA = {
 SYSTEM_PROMPT = """You reconstruct ONE web feature from a frozen behavioral specification.
 You receive only the specification JSON. You do NOT receive original application source.
 Generate a minimal independent static web app as exactly three files: index.html, style.css, script.js.
-Reproduce ONLY observation-kind requirements (required-field validation, successful task creation,
-task list display, persistence across reload). Hypotheses are not requirements.
-Do not assume a specific storage technology; choose any approach that matches observed behavior.
+Reproduce ONLY observation-kind requirements from the specification. Hypotheses are not requirements.
+Match the observed visible behaviors (inputs, controls, messages, results) described in observations.
+Do not invent unobserved features. Do not assume a specific storage technology.
 Do not include secrets, network calls to external hosts, or shell commands.
 Return structured JSON matching the schema.
 """
@@ -175,6 +175,10 @@ def assert_no_original_source_in_context(context: dict) -> None:
         "getelementbyid('task-form')",
         'getelementbyid("task-form")',
         'const key = \'reversex_fixture_tasks_v1\'',
+        'data-reversex-original="calculator-v1"',
+        "getelementbyid('num-a')",
+        'getelementbyid("num-a")',
+        "getelementbyid('btn-add')",
     )
     for marker in forbidden_markers:
         if marker in blob:
@@ -186,6 +190,8 @@ def ensure_sample_app_paths_not_read(accessed_paths: list[Path]) -> None:
         normalized = path.resolve().as_posix().lower()
         if '/sample_app/' in normalized or normalized.endswith('/sample_app'):
             raise RuntimeError(f'reconstruction must not read sample_app path: {path}')
+        if '/fixtures/calculator/' in normalized or normalized.endswith('/fixtures/calculator'):
+            raise RuntimeError(f'reconstruction must not read calculator fixture path: {path}')
 
 
 def validate_reconstruction_response(raw: str | dict) -> ReconstructionPayload:

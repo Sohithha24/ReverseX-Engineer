@@ -1,6 +1,6 @@
 """Build a behavioral specification from investigation observations only.
 
-Never reads sample_app source. Never invents unobserved behavior as fact.
+Never reads original fixture source. Never invents unobserved behavior as fact.
 """
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from reversex.targets import get_target
 
 
 class EvidenceKind(str, Enum):
@@ -75,14 +77,30 @@ def _ok_events(report: dict) -> list[dict]:
     return [e for e in report.get('events') or [] if e.get('status') == 'ok' and e.get('decision')]
 
 
-def build_behavior_spec(report: dict, *, source_report: str, report_bytes: bytes) -> BehaviorSpec:
-    """Derive requirements only from recorded events and objective flags."""
+def _find_supporting_step(events: list[dict], objective_key: str, objectives: dict) -> int | None:
+    evidence = (objectives.get(objective_key) or {}).get('evidence') or ''
+    # evidence strings look like: "step N: ..."
+    if evidence.startswith('step '):
+        try:
+            return int(evidence.split(':', 1)[0].replace('step', '').strip())
+        except ValueError:
+            pass
+    for event in events:
+        if event.get('step') is None:
+            continue
+        # Fallback: first click after fills matching objective heuristics already marked supported.
+        return event.get('step')
+    return None
+
+
+def build_taskboard_spec(report: dict, *, source_report: str, report_bytes: bytes) -> BehaviorSpec:
+    """Derive TaskBoard requirements only from recorded events and objective flags."""
     events = _ok_events(report)
     by_step = {e.get('step'): e for e in events if e.get('step') is not None}
     objectives = report.get('objectives') or {}
     requirements: list[BehaviorRequirement] = []
+    target = get_target('taskboard')
 
-    # --- Observation: empty submission validation ---
     empty_obj = objectives.get('empty_task_submission') or {}
     step1 = by_step.get(1)
     if empty_obj.get('supported') and step1:
@@ -119,11 +137,9 @@ def build_behavior_spec(report: dict, *, source_report: str, report_bytes: bytes
                 'Whether whitespace-only names are rejected was not separately tested.',
             ],
         ))
-        # Keep before text only as context uncertainty if unexpected
         if 'No tasks yet.' not in before:
             requirements[-1].uncertainties.append('Initial empty-state phrasing differed from common fixture text.')
 
-    # --- Observation: valid task creation ---
     valid_obj = objectives.get('valid_task_submission') or {}
     step2 = by_step.get(2)
     step3 = by_step.get(3)
@@ -171,7 +187,6 @@ def build_behavior_spec(report: dict, *, source_report: str, report_bytes: bytes
             ],
         ))
 
-    # --- Observation: persistence after reload ---
     persist_obj = objectives.get('reload_persistence') or {}
     step4 = by_step.get(4)
     persist_name = persist_obj.get('task_name') or task_name
@@ -206,7 +221,6 @@ def build_behavior_spec(report: dict, *, source_report: str, report_bytes: bytes
             ],
         ))
 
-    # --- Explicit hypotheses (not observations) ---
     requirements.append(BehaviorRequirement(
         id='HYP-STORAGE-UNKNOWN',
         kind=EvidenceKind.HYPOTHESIS,
@@ -237,23 +251,205 @@ def build_behavior_spec(report: dict, *, source_report: str, report_bytes: bytes
     return BehaviorSpec(
         source_report=source_report,
         source_report_sha256=_sha256_bytes(report_bytes),
-        feature='Add task / TaskBoard visible behavior',
+        feature=target.feature_label,
         status='draft',
         requirements=requirements,
         global_uncertainties=[
             'UI chrome, styling, and exact labels beyond observed visible_text are not required.',
             'Only behaviors evidenced in the investigation report are observation requirements.',
-            'sample_app source must not be used as reconstruction input.',
+            'Original application source must not be used as reconstruction input.',
         ],
-        excluded_from_model_context=[
-            'sample_app/**',
-            'sample_app/index.html',
-            'sample_app/style.css',
-            'sample_app/app.js',
-            'Any original HTML/CSS/JS implementation files',
-            'Repository credentials and .env',
-        ],
+        excluded_from_model_context=list(target.excluded_from_model_context),
     )
+
+
+def build_calculator_spec(report: dict, *, source_report: str, report_bytes: bytes) -> BehaviorSpec:
+    """Derive calculator requirements from supported objectives + actual event snippets."""
+    events = _ok_events(report)
+    by_step = {e.get('step'): e for e in events if e.get('step') is not None}
+    objectives = report.get('objectives') or {}
+    requirements: list[BehaviorRequirement] = []
+    target = get_target('calculator')
+
+    def add_obs(req_id: str, objective_key: str, feature: str, preconditions: list[str],
+                input_values: dict, action_performed: str, observed_result: str, uncertainties: list[str]):
+        obj = objectives.get(objective_key) or {}
+        if not obj.get('supported'):
+            return
+        step = None
+        evidence = obj.get('evidence') or ''
+        if evidence.startswith('step '):
+            try:
+                step = int(evidence.split(':', 1)[0].replace('step', '').strip())
+            except ValueError:
+                step = None
+        event = by_step.get(step) if step is not None else None
+        if event is None:
+            # Find any ok click event as weak fallback only if objective marked supported.
+            for e in events:
+                if (e.get('decision') or {}).get('action') == 'click':
+                    event = e
+                    step = e.get('step')
+                    break
+        if event is None or step is None:
+            return
+        decision = event.get('decision') or {}
+        after = _visible(event, 'after')
+        requirements.append(BehaviorRequirement(
+            id=req_id,
+            kind=EvidenceKind.OBSERVATION,
+            feature=feature,
+            preconditions=preconditions,
+            action_performed=action_performed or f"{decision.get('action')} on {decision.get('element_id')}",
+            input_values=input_values,
+            observed_result=observed_result if observed_result else f'Visible text after action: {after[:240]}',
+            evidence=[
+                EvidenceRef(
+                    report_path=source_report,
+                    step=int(step),
+                    objective_key=objective_key,
+                    note=obj.get('evidence') or objective_key,
+                ),
+            ],
+            uncertainties=uncertainties,
+        ))
+
+    empty = objectives.get('empty_input_handling') or {}
+    if empty.get('supported'):
+        add_obs(
+            'REQ-CALC-EMPTY',
+            'empty_input_handling',
+            'calculator_empty_input',
+            [
+                'Calculator shows two numeric inputs and operation controls.',
+                'An operation was attempted without both numbers filled.',
+            ],
+            {'num_a': None, 'num_b': None},
+            'click an operation control with empty/incomplete inputs',
+            'Page showed a required/empty-input style message (exact wording as observed in the investigation event).',
+            ['Exact wording may vary; presence of an empty-input response is the requirement.'],
+        )
+
+    add_obj = objectives.get('addition_operation') or {}
+    if add_obj.get('supported'):
+        ops = add_obj.get('operands') or []
+        add_obs(
+            'REQ-CALC-ADD',
+            'addition_operation',
+            'calculator_addition',
+            [
+                'Two numeric values can be entered into the visible inputs.',
+                'An Add control is available.',
+            ],
+            {'num_a': ops[0] if len(ops) > 0 else None, 'num_b': ops[1] if len(ops) > 1 else None},
+            'fill two numbers then click Add',
+            (
+                f'After Add, the page displayed a visible numeric result for operands {ops}.'
+                if ops else 'After Add, the page displayed a visible numeric result.'
+            ),
+            [
+                'Holdout operands used later in validation are not part of this investigation evidence.',
+                'Formatting of the result (spacing, labels) is not strictly required beyond a correct visible outcome.',
+            ],
+        )
+
+    sub_obj = objectives.get('subtraction_operation') or {}
+    if sub_obj.get('supported'):
+        ops = sub_obj.get('operands') or []
+        add_obs(
+            'REQ-CALC-SUB',
+            'subtraction_operation',
+            'calculator_subtraction',
+            [
+                'Two numeric values can be entered into the visible inputs.',
+                'A Subtract control is available.',
+            ],
+            {'num_a': ops[0] if len(ops) > 0 else None, 'num_b': ops[1] if len(ops) > 1 else None},
+            'fill two numbers then click Subtract',
+            (
+                f'After Subtract, the page displayed a visible numeric result for operands {ops}.'
+                if ops else 'After Subtract, the page displayed a visible numeric result.'
+            ),
+            ['Cross-checks with holdout values happen only in independent validation.'],
+        )
+
+    reset_obj = objectives.get('reset_behavior') or {}
+    if reset_obj.get('supported'):
+        add_obs(
+            'REQ-CALC-RESET',
+            'reset_behavior',
+            'calculator_reset',
+            ['Calculator had prior visible state (inputs and/or result).'],
+            {},
+            'click Reset',
+            'After Reset, prior result/state was cleared or altered as observed.',
+            ['Whether inputs are also cleared vs only the result is taken from observations.'],
+        )
+
+    neg_obj = objectives.get('negative_number_handling') or {}
+    if neg_obj.get('supported'):
+        ops = neg_obj.get('operands') or []
+        add_obs(
+            'REQ-CALC-NEG',
+            'negative_number_handling',
+            'calculator_negative',
+            ['At least one operand was a negative number during an observed operation.'],
+            {'num_a': ops[0] if len(ops) > 0 else None, 'num_b': ops[1] if len(ops) > 1 else None},
+            'operate with a negative operand',
+            'Page still produced a visible numeric result after the operation.',
+            ['Only the observed negative case is required; other sign combinations are uncertain.'],
+        )
+
+    # Hypothesis: arithmetic meaning (do not elevate to observation without proof language).
+    if any(r.kind == EvidenceKind.OBSERVATION for r in requirements):
+        step_for_hyp = next((r.evidence[0].step for r in requirements if r.evidence), 1)
+        requirements.append(BehaviorRequirement(
+            id='HYP-CALC-ARITHMETIC',
+            kind=EvidenceKind.HYPOTHESIS,
+            feature='calculator',
+            preconditions=['Numeric results appeared after Add/Subtract clicks.'],
+            action_performed='(none — interpretive note)',
+            input_values={},
+            observed_result=(
+                'Hypothesis only: Add/Subtract correspond to ordinary arithmetic. '
+                'Independent validation must confirm with holdout inputs against the original oracle.'
+            ),
+            evidence=[
+                EvidenceRef(
+                    report_path=source_report,
+                    step=int(step_for_hyp or 1),
+                    objective_key='addition_operation',
+                    note='arithmetic semantics hypothesized from visible results',
+                ),
+            ],
+            uncertainties=['Do not treat hypothesized formulas as proven without oracle comparison.'],
+        ))
+
+    if not any(r.kind == EvidenceKind.OBSERVATION for r in requirements):
+        raise ValueError('No observation-backed calculator requirements could be derived from the report')
+
+    return BehaviorSpec(
+        source_report=source_report,
+        source_report_sha256=_sha256_bytes(report_bytes),
+        feature=target.feature_label,
+        status='draft',
+        requirements=requirements,
+        global_uncertainties=[
+            'UI chrome and exact copy beyond observed visible_text are not required.',
+            'Only behaviors evidenced in the investigation report are observation requirements.',
+            'Original calculator source must not be used as reconstruction input.',
+            'Validation holdout numbers are chosen later and must not be supplied to the model here.',
+        ],
+        excluded_from_model_context=list(target.excluded_from_model_context),
+    )
+
+
+def build_behavior_spec(report: dict, *, source_report: str, report_bytes: bytes) -> BehaviorSpec:
+    """Derive requirements only from recorded events and objective flags."""
+    target_id = report.get('target_id') or 'taskboard'
+    if target_id == 'calculator':
+        return build_calculator_spec(report, source_report=source_report, report_bytes=report_bytes)
+    return build_taskboard_spec(report, source_report=source_report, report_bytes=report_bytes)
 
 
 def assert_observations_have_evidence(spec: BehaviorSpec) -> None:
@@ -296,10 +492,8 @@ def generate_and_freeze_spec(
     frozen_dir.mkdir(parents=True, exist_ok=True)
     frozen_path = frozen_dir / f'behavior_spec.{digest[:16]}.json'
     frozen_path.write_bytes(frozen_bytes)
-    # Pointer file for consumers; content hash pins the frozen artifact.
     (output_dir / 'behavior_spec.frozen.json').write_bytes(frozen_bytes)
     (output_dir / 'behavior_spec.sha256').write_text(digest + '\n', encoding='utf-8')
-    # Also refresh the public draft to frozen content for Phase 2 consumers.
     draft_path.write_bytes(frozen_bytes)
     return BehaviorSpec.model_validate_json(frozen_bytes)
 

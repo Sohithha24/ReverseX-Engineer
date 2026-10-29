@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from reversex.evidence_graph import EvidenceGraph, build_evidence_graph, export_evidence_graph
 from reversex.orchestrate import run_pipeline
+from reversex.targets import TARGETS, list_target_ids
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / 'artifacts'
@@ -55,6 +56,7 @@ class CreateInvestigation(BaseModel):
     pipeline: Literal['investigate_only', 'full'] = 'full'
     reuse_reconstruction: bool = True
     max_actions: int = Field(default=10, ge=1, le=20)
+    target_id: Literal['taskboard', 'calculator'] = 'taskboard'
 
     @field_validator('mode')
     @classmethod
@@ -71,6 +73,7 @@ class InvestigationSummary(BaseModel):
     status: str
     mode: str | None = None
     pipeline: str | None = None
+    target_id: str | None = None
     queued_at: str | None = None
     updated_at: str | None = None
     stages: dict[str, Any] = Field(default_factory=dict)
@@ -103,7 +106,7 @@ def _get_job(job_id: str) -> dict[str, Any]:
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
     """Strip non-serializable / sensitive fields for API responses."""
     allowed = {
-        'id', 'status', 'mode', 'pipeline', 'updated_at', 'stages', 'errors',
+        'id', 'status', 'mode', 'pipeline', 'target_id', 'updated_at', 'stages', 'errors',
         'artifacts', 'meta_api_requests_total', 'error', 'queued_at',
     }
     return {k: job[k] for k in allowed if k in job}
@@ -127,13 +130,31 @@ def health():
     recon = (ARTIFACTS / 'phase2' / 'reconstructed-app' / 'index.html').is_file()
     return {
         'status': 'ok',
-        'phase': '4a',
+        'phase': '5c',
         'reconstruction_available': recon,
         'validation_available': (ARTIFACTS / 'phase3' / 'validation_results.json').is_file(),
         'docker_required_for_validation_preview': True,
         'public': False,
+        'authorized_targets': list_target_ids(),
         'note': 'Local-only API. Not authenticated.',
     }
+
+
+@app.get('/api/targets')
+def get_targets():
+    """List explicitly authorized local investigation targets only."""
+    items = []
+    for tid in list_target_ids():
+        t = TARGETS[tid]
+        items.append({
+            'id': t.id,
+            'label': 'TaskBoard' if t.id == 'taskboard' else 'MiniCalc',
+            'origin': t.origin,
+            'description': t.feature_label,
+            'validation_suite': t.validation_suite,
+            'reuse_reconstruction_allowed': t.id == 'taskboard',
+        })
+    return {'targets': items}
 
 
 @app.post('/api/investigations', response_model=InvestigationSummary)
@@ -147,6 +168,7 @@ def create_investigation(payload: CreateInvestigation):
             'status': 'queued',
             'mode': payload.mode,
             'pipeline': payload.pipeline,
+            'target_id': payload.target_id,
             'queued_at': None,
             'stages': {},
             'errors': [],
@@ -179,6 +201,7 @@ def create_investigation(payload: CreateInvestigation):
                 max_actions=payload.max_actions,
                 artifacts_root=ARTIFACTS,
                 status_cb=status_cb,
+                target_id=payload.target_id,
             )
             with _lock:
                 _jobs[job_id].update(summary)
@@ -262,6 +285,16 @@ def get_validation(job_id: str):
         raise HTTPException(status_code=404, detail='Validation results not available yet')
 
 
+@app.get('/api/investigations/{job_id}/repair')
+def get_repair(job_id: str):
+    """Return repair_report.json when a bounded repair stage actually ran."""
+    _get_job(job_id)
+    try:
+        return _read_json_artifact(job_id, 'repair', 'repair_report.json')
+    except HTTPException:
+        raise HTTPException(status_code=404, detail='Repair results not available')
+
+
 @app.get('/api/investigations/{job_id}/evidence-graph', response_model=EvidenceGraph)
 def get_evidence_graph(job_id: str):
     _require_job_id(job_id)
@@ -269,12 +302,14 @@ def get_evidence_graph(job_id: str):
     if path.is_file():
         return EvidenceGraph.model_validate_json(path.read_text(encoding='utf-8'))
     # Build on demand from available job artifacts only (no invented nodes).
+    repair_path = ARTIFACTS / job_id / 'repair' / 'repair_report.json'
     graph = build_evidence_graph(
         root=ROOT,
         investigation_report=ARTIFACTS / job_id / 'investigation' / 'report.json',
         behavior_spec=ARTIFACTS / job_id / 'specification' / 'behavior_spec.frozen.json',
         reconstruction_dir=ARTIFACTS / job_id / 'reconstructed-app',
         validation_results=ARTIFACTS / job_id / 'validation' / 'validation_results.json',
+        repair_report=repair_path if repair_path.is_file() else None,
     )
     if not graph.nodes:
         raise HTTPException(status_code=404, detail='Evidence graph not available yet')
@@ -305,6 +340,15 @@ def demo_evidence_graph():
     out = ARTIFACTS / 'phase4a' / 'evidence_graph.json'
     export_evidence_graph(graph, out)
     return graph
+
+
+@app.get('/api/demo/controlled-repair')
+def demo_controlled_repair():
+    """Serve the labeled Controlled Repair Evaluation report (read-only; no new Muse calls)."""
+    path = ARTIFACTS / 'phase5c' / 'controlled_repair_eval' / 'repair' / 'repair_report.json'
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail='Controlled repair evaluation not available')
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 def _iter_job_screenshots(job_id: str) -> list[dict[str, str]]:

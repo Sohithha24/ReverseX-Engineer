@@ -6,6 +6,7 @@ import type {
   EventsResponse,
   InvestigationSummary,
   ResultsResponse,
+  RepairReport,
   ScreenshotItem,
   ValidationResultsFile,
 } from '../api/types'
@@ -17,6 +18,7 @@ export function useInvestigation() {
   const [events, setEvents] = useState<EventsResponse | null>(null)
   const [results, setResults] = useState<ResultsResponse | null>(null)
   const [validation, setValidation] = useState<ValidationResultsFile | null>(null)
+  const [repair, setRepair] = useState<RepairReport | null>(null)
   const [graph, setGraph] = useState<EvidenceGraph | null>(null)
   const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +51,11 @@ export function useInvestigation() {
         setValidation(null)
       }
       try {
+        setRepair(await api.getRepair(id))
+      } catch {
+        setRepair(null)
+      }
+      try {
         setGraph(await api.getEvidenceGraph(id))
       } catch {
         /* graph may be partial */
@@ -79,6 +86,7 @@ export function useInvestigation() {
     setEvents(null)
     setResults(null)
     setValidation(null)
+    setRepair(null)
     setGraph(null)
     setScreenshots([])
     try {
@@ -106,6 +114,49 @@ export function useInvestigation() {
     }
   }, [])
 
+  const loadControlledRepairDemo = useCallback(async () => {
+    try {
+      setRepair(await api.getDemoControlledRepair())
+      try {
+        setGraph(await api.getDemoEvidenceGraph())
+      } catch {
+        /* optional */
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [])
+
+  const watchExisting = useCallback(async (id: string) => {
+    clearTimer()
+    setError(null)
+    setBusy(true)
+    setEvents(null)
+    setResults(null)
+    setValidation(null)
+    setRepair(null)
+    setGraph(null)
+    setScreenshots([])
+    try {
+      await pollOnce(id)
+      const summary = await api.getInvestigation(id)
+      if (!TERMINAL_STATUSES.has(summary.status)) {
+        timer.current = window.setInterval(() => {
+          void pollOnce(id).catch((e) => {
+            setError(e instanceof Error ? e.message : String(e))
+            clearTimer()
+            setBusy(false)
+          })
+        }, POLL_MS)
+      } else {
+        setBusy(false)
+      }
+    } catch (e) {
+      setBusy(false)
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [pollOnce])
+
   useEffect(() => () => clearTimer(), [])
 
   return {
@@ -113,11 +164,14 @@ export function useInvestigation() {
     events,
     results,
     validation,
+    repair,
     graph,
     screenshots,
     error,
     busy,
     start,
     loadDemoGraph,
+    loadControlledRepairDemo,
+    watchExisting,
   }
 }

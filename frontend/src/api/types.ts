@@ -20,7 +20,23 @@ export interface HealthResponse {
   validation_available?: boolean
   docker_required_for_validation_preview?: boolean
   public?: boolean
+  authorized_targets?: string[]
   note?: string
+}
+
+export type TargetId = 'taskboard' | 'calculator'
+
+export interface AuthorizedTarget {
+  id: TargetId
+  label: string
+  origin: string
+  description: string
+  validation_suite: string
+  reuse_reconstruction_allowed: boolean
+}
+
+export interface TargetsResponse {
+  targets: AuthorizedTarget[]
 }
 
 export interface CreateInvestigationRequest {
@@ -28,6 +44,8 @@ export interface CreateInvestigationRequest {
   pipeline: Pipeline
   reuse_reconstruction: boolean
   max_actions: number
+  /** Authorized fixture; defaults to taskboard on the API. */
+  target_id?: TargetId
 }
 
 export interface InvestigationSummary {
@@ -35,6 +53,7 @@ export interface InvestigationSummary {
   status: JobStatus | string
   mode?: string | null
   pipeline?: string | null
+  target_id?: string | null
   queued_at?: string | null
   updated_at?: string | null
   stages?: Record<string, unknown>
@@ -42,6 +61,41 @@ export interface InvestigationSummary {
   artifacts?: Record<string, unknown>
   meta_api_requests_total?: number | null
   error?: string | null
+}
+
+export interface RepairAttempt {
+  attempt: number
+  failed_scenarios_addressed: string[]
+  meta_api_requests?: number
+  changed_files?: string[]
+  candidate_dir?: string
+  validation_artifact?: string | null
+  prior_match_rate_percent?: number | null
+  new_match_rate_percent?: number | null
+  newly_passed_tests?: string[]
+  regressed_tests?: string[]
+  remaining_failures?: string[]
+  runtime_seconds?: number | null
+  status?: string
+  error?: string | null
+  accepted_as_best?: boolean
+}
+
+export interface RepairReport {
+  evaluation_kind: 'pipeline_repair' | 'controlled_fault_injection' | string
+  label: string
+  target_id: string
+  max_attempts?: number
+  initial_match_rate_percent?: number | null
+  final_match_rate_percent?: number | null
+  initial_failed?: string[]
+  attempts?: RepairAttempt[]
+  best_candidate_dir?: string | null
+  best_match_rate_percent?: number | null
+  meta_api_requests_total?: number
+  stopped_reason?: string
+  original_fixture_untouched?: boolean
+  notes?: string[]
 }
 
 export interface EventsResponse {
@@ -137,4 +191,5 @@ export interface ValidationResultsFile {
   behavioral_match_rate_percent?: number | null
   tests?: ValidationTestCase[]
   isolation?: Record<string, unknown>
+  holdout_values?: Record<string, string>
 }

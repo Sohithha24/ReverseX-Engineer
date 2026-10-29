@@ -76,9 +76,31 @@ Request (`extra` fields forbidden):
   "mode": "scripted",
   "pipeline": "full",
   "reuse_reconstruction": true,
-  "max_actions": 10
+  "max_actions": 10,
+  "target_id": "taskboard"
 }
 ```
+
+`target_id` (optional, default `taskboard`): authorized local fixture to investigate.
+
+| Value | Origin | Notes |
+|-------|--------|-------|
+| `taskboard` | `http://127.0.0.1:8001` | Original Phase 1–5A TaskBoard fixture (`sample_app/`) |
+| `calculator` | `http://127.0.0.1:8003` | Phase 5B MiniCalc fixture (`fixtures/calculator/`) |
+
+Calculator runs must set `reuse_reconstruction: false`. TaskBoard Phase 2 reuse is never applied to calculator.
+
+### `GET /api/targets`
+
+Returns the allowlisted applications (`taskboard`, `calculator`) with origin and description. Arbitrary public URLs are not accepted.
+
+### `GET /api/investigations/{id}/repair`
+
+Returns `repair/repair_report.json` when bounded repair actually ran after validation failures.
+
+### `GET /api/demo/controlled-repair`
+
+Read-only Controlled Repair Evaluation artifact (fault-injected copy). Not an organic reconstruction failure.
 
 | Field | Type | Notes |
 |-------|------|-------|

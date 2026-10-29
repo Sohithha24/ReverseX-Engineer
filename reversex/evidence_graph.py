@@ -22,6 +22,8 @@ NodeType = Literal[
     'artifact',
     'validation_test',
     'validation_outcome',
+    'repair_attempt',
+    'mismatch',
 ]
 
 EdgeType = Literal[
@@ -31,6 +33,8 @@ EdgeType = Literal[
     'validated_by',
     'derived_from',
     'produced',
+    'repaired_by',
+    'revalidated_by',
 ]
 
 
@@ -85,6 +89,7 @@ def build_evidence_graph(
     behavior_spec: Path | None = None,
     reconstruction_dir: Path | None = None,
     validation_results: Path | None = None,
+    repair_report: Path | None = None,
 ) -> EvidenceGraph:
     root = root.resolve()
     nodes: list[EvidenceNode] = []
@@ -284,6 +289,75 @@ def build_evidence_graph(
                     oid = f'objective:{obj}'
                     if any(n.id == oid for n in nodes):
                         add_edge('supports', oid, test_node, 'Investigation objective referenced by validation test')
+
+    # Repair chain — only when a real repair_report.json exists with attempts.
+    if repair_report is not None and repair_report.is_file():
+        sources.append(_rel(repair_report, root))
+        repair = json.loads(repair_report.read_text(encoding='utf-8'))
+        for attempt in repair.get('attempts') or []:
+            n = attempt.get('attempt')
+            if n is None:
+                continue
+            rid = f'repair_attempt:{n}'
+            nodes.append(EvidenceNode(
+                id=rid,
+                type='repair_attempt',
+                description=(
+                    f"Repair attempt {n} status={attempt.get('status')} "
+                    f"rate {attempt.get('prior_match_rate_percent')}→{attempt.get('new_match_rate_percent')}"
+                ),
+                evidence_ref=_rel(repair_report, root),
+                status=str(attempt.get('status') or 'recorded'),
+                metadata={
+                    'failed_scenarios_addressed': attempt.get('failed_scenarios_addressed'),
+                    'changed_files': attempt.get('changed_files'),
+                    'newly_passed_tests': attempt.get('newly_passed_tests'),
+                    'regressed_tests': attempt.get('regressed_tests'),
+                    'candidate_dir': attempt.get('candidate_dir'),
+                    'validation_artifact': attempt.get('validation_artifact'),
+                    'accepted_as_best': attempt.get('accepted_as_best'),
+                },
+            ))
+            for tid in attempt.get('failed_scenarios_addressed') or []:
+                test_node = f'validation_test:{tid}'
+                mismatch_id = f'mismatch:{tid}:attempt-{n}'
+                nodes.append(EvidenceNode(
+                    id=mismatch_id,
+                    type='mismatch',
+                    description=f'Observed mismatch motivating repair attempt {n} for {tid}',
+                    evidence_ref=_rel(repair_report, root),
+                    status='recorded',
+                    metadata={'test_id': tid, 'attempt': n},
+                ))
+                if any(node.id == test_node for node in nodes):
+                    add_edge('derived_from', mismatch_id, test_node, 'Mismatch derived from failed validation test')
+                add_edge('repaired_by', mismatch_id, rid, 'Mismatch addressed by repair attempt')
+            cand = attempt.get('candidate_dir')
+            if cand:
+                cand_node = f'reconstruction:repair-attempt-{n}'
+                nodes.append(EvidenceNode(
+                    id=cand_node,
+                    type='reconstruction',
+                    description=f'Repaired candidate from attempt {n}',
+                    evidence_ref=str(cand).replace('\\', '/'),
+                    status='repaired',
+                    metadata={'attempt': n, 'changed_files': attempt.get('changed_files')},
+                ))
+                add_edge('produced', rid, cand_node, 'Repair attempt produced updated reconstruction')
+                val_art = attempt.get('validation_artifact')
+                if val_art:
+                    reval_node = f'validation_outcome:repair-attempt-{n}'
+                    nodes.append(EvidenceNode(
+                        id=reval_node,
+                        type='validation_outcome',
+                        description=(
+                            f"Revalidation after repair attempt {n}: "
+                            f"{attempt.get('new_match_rate_percent')}%"
+                        ),
+                        evidence_ref=str(val_art).replace('\\', '/'),
+                        status=str(attempt.get('status') or 'recorded'),
+                    ))
+                    add_edge('revalidated_by', cand_node, reval_node, 'Repaired reconstruction revalidated')
 
     return EvidenceGraph(
         generated_at=_now(),

@@ -4,8 +4,10 @@ import type {
   EventsResponse,
   HealthResponse,
   InvestigationSummary,
+  RepairReport,
   ResultsResponse,
   ScreenshotsResponse,
+  TargetsResponse,
   ValidationResultsFile,
 } from './types'
 
@@ -40,6 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<HealthResponse>('/health'),
+  listTargets: () => request<TargetsResponse>('/api/targets'),
   createInvestigation: (body: CreateInvestigationRequest) =>
     request<InvestigationSummary>('/api/investigations', {
       method: 'POST',
@@ -55,12 +58,16 @@ export const api = {
     request<EvidenceGraph>(`/api/investigations/${id}/evidence-graph`),
   getDemoEvidenceGraph: () =>
     request<EvidenceGraph>('/api/demo/evidence-graph'),
+  getDemoControlledRepair: () =>
+    request<RepairReport>('/api/demo/controlled-repair'),
   getReport: (id: string) =>
     request<Record<string, unknown>>(`/api/investigations/${id}/report`),
   listScreenshots: (id: string) =>
     request<ScreenshotsResponse>(`/api/investigations/${id}/screenshots`),
   getValidation: (id: string) =>
     request<ValidationResultsFile>(`/api/investigations/${id}/validation`),
+  getRepair: (id: string) =>
+    request<RepairReport>(`/api/investigations/${id}/repair`),
   screenshotUrl: (id: string, filename: string) =>
     `${apiBaseUrl()}/api/investigations/${id}/screenshots/${encodeURIComponent(filename)}`,
 }

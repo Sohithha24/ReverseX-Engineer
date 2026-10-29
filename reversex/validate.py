@@ -34,6 +34,9 @@ class ObservedState(BaseModel):
     validation_message_normalized: str | None = None
     empty_state_visible: bool | None = None
     visible_text_excerpt: str = ''
+    # Generic outcome fields used by non-TaskBoard suites (e.g. calculator).
+    result_text: str | None = None
+    contains_tokens: list[str] = Field(default_factory=list)
 
 
 class SideObservation(BaseModel):
@@ -79,6 +82,7 @@ class ValidationReport(BaseModel):
 
 _VALIDATION_PATTERNS = (
     re.compile(r'task name is required', re.I),
+    re.compile(r'both numbers are required', re.I),
     re.compile(r'required', re.I),
 )
 _EMPTY_STATE_PATTERNS = (
@@ -130,6 +134,8 @@ def compare_observed_states(
     compare_validation: bool = False,
     compare_tasks: bool = False,
     compare_empty: bool = False,
+    compare_result: bool = False,
+    compare_tokens: bool = False,
 ) -> list[str]:
     diffs: list[str] = []
     if compare_validation:
@@ -166,6 +172,16 @@ def compare_observed_states(
                 f'empty_state_visible original={original.empty_state_visible} '
                 f'reconstruction={reconstruction.empty_state_visible}'
             )
+    if compare_result:
+        o_res = (original.result_text or '').strip()
+        r_res = (reconstruction.result_text or '').strip()
+        if o_res != r_res:
+            diffs.append(f'result_text original={o_res!r} reconstruction={r_res!r}')
+    if compare_tokens:
+        o_tok = set(original.contains_tokens)
+        r_tok = set(reconstruction.contains_tokens)
+        if o_tok != r_tok:
+            diffs.append(f'contains_tokens original={sorted(o_tok)} reconstruction={sorted(r_tok)}')
     return diffs
 
 
@@ -180,13 +196,67 @@ def calculate_match_rate(results: list[BehavioralCaseResult]) -> tuple[int, int,
 
 
 def make_holdout_values() -> dict[str, str]:
-    """Fresh values chosen at validation time — never sent to Muse."""
+    """Fresh TaskBoard values chosen at validation time — never sent to Muse."""
     token = secrets.token_hex(4)
     return {
         'task_a': f'Holdout Briefing {token}',
         'task_b': f'Holdout Followup {token}',
         'whitespace': '   \t  ',
     }
+
+
+def make_calculator_holdouts() -> dict[str, str]:
+    """Fresh numeric holdouts chosen at validation time — never sent to Muse."""
+    # Avoid tiny constants that commonly appear in demos (1,2,3).
+    a = 10 + secrets.randbelow(40)  # 10..49
+    b = 10 + secrets.randbelow(40)
+    if a == b:
+        b = a + 7
+    neg_a = -(10 + secrets.randbelow(20))
+    neg_b = 5 + secrets.randbelow(15)
+    return {
+        'add_a': str(a),
+        'add_b': str(b),
+        'sub_a': str(a + 3),
+        'sub_b': str(b),
+        'neg_a': str(neg_a),
+        'neg_b': str(neg_b),
+    }
+
+
+def extract_result_text(visible_text: str) -> str | None:
+    """Best-effort visible result extraction without requiring identical DOM ids."""
+    text = visible_text or ''
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for idx, line in enumerate(lines):
+        if line.lower() in ('result', 'result:'):
+            if idx + 1 < len(lines):
+                candidate = lines[idx + 1]
+                if re.fullmatch(r'-?\d+(?:\.\d+)?', candidate):
+                    return candidate
+        if line.lower().startswith('result:'):
+            rest = line.split(':', 1)[1].strip()
+            if re.fullmatch(r'-?\d+(?:\.\d+)?', rest):
+                return rest
+    # Fallback: last standalone number-like token in the page.
+    nums = re.findall(r'(?m)^-?\d+(?:\.\d+)?$', text)
+    if nums:
+        return nums[-1]
+    return None
+
+
+def build_calculator_state(visible_text: str, *, expect_tokens: list[str] | None = None) -> ObservedState:
+    text = visible_text or ''
+    validation = extract_validation_message(text)
+    result = extract_result_text(text)
+    tokens = [t for t in (expect_tokens or []) if t and t in text]
+    return ObservedState(
+        validation_error_present=bool(validation),
+        validation_message_normalized=validation,
+        result_text=result,
+        contains_tokens=tokens,
+        visible_text_excerpt=normalize_visible_text(text)[:400],
+    )
 
 
 @dataclass
@@ -334,22 +404,62 @@ def _finalize_pair(
     )
 
 
-def run_validation(
-    *,
-    original_origin: str = DEFAULT_ORIGINAL,
-    reconstruction_origin: str = DEFAULT_RECONSTRUCTION,
-    reconstructed_dir: Path,
-    output_dir: Path,
-    isolation: dict[str, Any] | None = None,
-) -> ValidationReport:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    shots = output_dir / 'screenshots'
-    shots.mkdir(parents=True, exist_ok=True)
-    holdouts = make_holdout_values()
-    targets = _Targets(original=original_origin, reconstruction=reconstruction_origin)
-    results: list[BehavioralCaseResult] = []
-    notes: list[str] = []
+def _find_calc_controls(browser: SafeBrowser):
+    snap = browser.snapshot()
+    inputs = [e for e in snap.elements if e.kind in ('input', 'textarea')]
+    buttons = {e.label.lower(): e for e in snap.elements if e.kind == 'button'}
+    add = buttons.get('add') or next((e for e in snap.elements if e.kind == 'button' and 'add' in e.label.lower()), None)
+    sub = buttons.get('subtract') or next(
+        (e for e in snap.elements if e.kind == 'button' and 'sub' in e.label.lower()), None
+    )
+    reset = buttons.get('reset') or next(
+        (e for e in snap.elements if e.kind == 'button' and 'reset' in e.label.lower()), None
+    )
+    return snap, inputs, add, sub, reset
 
+
+def _calc_fill_operands(browser: SafeBrowser, a: str, b: str) -> None:
+    _, inputs, _, _, _ = _find_calc_controls(browser)
+    if len(inputs) < 2:
+        raise RuntimeError('calculator missing two inputs')
+    browser.act(Decision(action='fill', element_id=inputs[0].element_id, value=a, reason='fill A'))
+    _, inputs2, _, _, _ = _find_calc_controls(browser)
+    if len(inputs2) < 2:
+        raise RuntimeError('calculator missing two inputs after first fill')
+    browser.act(Decision(action='fill', element_id=inputs2[1].element_id, value=b, reason='fill B'))
+
+
+def _calc_empty_op(browser: SafeBrowser) -> ObservedState:
+    _, _, add, _, _ = _find_calc_controls(browser)
+    if not add:
+        raise RuntimeError('missing Add control')
+    after = browser.act(Decision(action='click', element_id=add.element_id, reason='empty add'))
+    return build_calculator_state(after.visible_text if after else '')
+
+
+def _calc_operate(browser: SafeBrowser, a: str, b: str, op: str) -> ObservedState:
+    _calc_fill_operands(browser, a, b)
+    _, _, add, sub, _ = _find_calc_controls(browser)
+    btn = add if op == 'add' else sub
+    if not btn:
+        raise RuntimeError(f'missing {op} control')
+    after = browser.act(Decision(action='click', element_id=btn.element_id, reason=f'{op} holdout'))
+    text = after.visible_text if after else ''
+    return build_calculator_state(text, expect_tokens=[a, b])
+
+
+def _calc_reset(browser: SafeBrowser, a: str, b: str) -> ObservedState:
+    created = _calc_operate(browser, a, b, 'add')
+    if not created.result_text:
+        return created
+    _, _, _, _, reset = _find_calc_controls(browser)
+    if not reset:
+        raise RuntimeError('missing Reset control')
+    after = browser.act(Decision(action='click', element_id=reset.element_id, reason='reset'))
+    return build_calculator_state(after.visible_text if after else '')
+
+
+def _make_timed_pair(targets: _Targets, shots: Path, notes: list[str]):
     def timed_pair(test_id: str, description: str, inputs: dict, evidence: list[str],
                    orig_fn, recon_fn, compare_kwargs: dict) -> BehavioralCaseResult:
         started = time.monotonic()
@@ -406,7 +516,24 @@ def run_validation(
                 error=str(exc)[:400],
             )
 
-    # TEST 1 — empty validation
+    return timed_pair
+
+
+def run_taskboard_validation(
+    *,
+    original_origin: str,
+    reconstruction_origin: str,
+    output_dir: Path,
+    isolation: dict[str, Any] | None = None,
+) -> ValidationReport:
+    shots = output_dir / 'screenshots'
+    shots.mkdir(parents=True, exist_ok=True)
+    holdouts = make_holdout_values()
+    targets = _Targets(original=original_origin, reconstruction=reconstruction_origin)
+    results: list[BehavioralCaseResult] = []
+    notes: list[str] = []
+    timed_pair = _make_timed_pair(targets, shots, notes)
+
     results.append(timed_pair(
         'empty_input_validation',
         'Submit empty task name; compare validation visibility',
@@ -417,7 +544,6 @@ def run_validation(
         {'compare_validation': True, 'compare_empty': True},
     ))
 
-    # TEST 2 — valid creation with holdout
     task_a = holdouts['task_a']
     results.append(timed_pair(
         'valid_task_creation',
@@ -429,7 +555,6 @@ def run_validation(
         {'compare_tasks': True, 'compare_empty': True},
     ))
 
-    # TEST 3 — persistence (same context within each side)
     results.append(timed_pair(
         'persistence_after_reload',
         'Create holdout task, reload, compare persistence',
@@ -440,7 +565,6 @@ def run_validation(
         {'compare_tasks': True},
     ))
 
-    # Additional checks only if the first three are not all invalid due to infra.
     core_invalid = sum(1 for r in results if r.status == 'invalid')
     if core_invalid < 3:
         task_b = holdouts['task_b']
@@ -465,7 +589,7 @@ def run_validation(
         ))
 
     total_valid, passed, failed, invalid, rate = calculate_match_rate(results)
-    report = ValidationReport(
+    return ValidationReport(
         original_origin=original_origin,
         reconstruction_origin=reconstruction_origin,
         isolation=isolation or {},
@@ -481,6 +605,118 @@ def run_validation(
         meta_api_requests=0,
         notes=notes,
     )
+
+
+def run_calculator_validation(
+    *,
+    original_origin: str,
+    reconstruction_origin: str,
+    output_dir: Path,
+    isolation: dict[str, Any] | None = None,
+) -> ValidationReport:
+    """Independent calculator oracle — original defines expected visible outcomes."""
+    shots = output_dir / 'screenshots'
+    shots.mkdir(parents=True, exist_ok=True)
+    holdouts = make_calculator_holdouts()
+    targets = _Targets(original=original_origin, reconstruction=reconstruction_origin)
+    results: list[BehavioralCaseResult] = []
+    notes: list[str] = []
+    timed_pair = _make_timed_pair(targets, shots, notes)
+
+    results.append(timed_pair(
+        'calc_empty_input',
+        'Operate with empty inputs; compare validation visibility',
+        {'num_a': '', 'num_b': ''},
+        ['calc:empty_input_handling', 'REQ-CALC-EMPTY'],
+        _calc_empty_op,
+        _calc_empty_op,
+        {'compare_validation': True},
+    ))
+
+    aa, ab = holdouts['add_a'], holdouts['add_b']
+    results.append(timed_pair(
+        'calc_addition',
+        'Add fresh holdout numbers; compare visible result',
+        {'num_a': aa, 'num_b': ab},
+        ['calc:addition_operation', 'REQ-CALC-ADD'],
+        lambda b: _calc_operate(b, aa, ab, 'add'),
+        lambda b: _calc_operate(b, aa, ab, 'add'),
+        {'compare_result': True, 'compare_validation': True},
+    ))
+
+    sa, sb = holdouts['sub_a'], holdouts['sub_b']
+    results.append(timed_pair(
+        'calc_subtraction',
+        'Subtract fresh holdout numbers; compare visible result',
+        {'num_a': sa, 'num_b': sb},
+        ['calc:subtraction_operation', 'REQ-CALC-SUB'],
+        lambda b: _calc_operate(b, sa, sb, 'sub'),
+        lambda b: _calc_operate(b, sa, sb, 'sub'),
+        {'compare_result': True, 'compare_validation': True},
+    ))
+
+    na, nb = holdouts['neg_a'], holdouts['neg_b']
+    results.append(timed_pair(
+        'calc_negative',
+        'Operate with a negative holdout operand; compare visible result',
+        {'num_a': na, 'num_b': nb},
+        ['calc:negative_number_handling', 'REQ-CALC-NEG'],
+        lambda b: _calc_operate(b, na, nb, 'add'),
+        lambda b: _calc_operate(b, na, nb, 'add'),
+        {'compare_result': True, 'compare_validation': True},
+    ))
+
+    results.append(timed_pair(
+        'calc_reset',
+        'Compute then reset; compare cleared visible outcome',
+        {'num_a': aa, 'num_b': ab},
+        ['calc:reset_behavior', 'REQ-CALC-RESET'],
+        lambda b: _calc_reset(b, aa, ab),
+        lambda b: _calc_reset(b, aa, ab),
+        {'compare_result': True, 'compare_validation': True},
+    ))
+
+    total_valid, passed, failed, invalid, rate = calculate_match_rate(results)
+    return ValidationReport(
+        original_origin=original_origin,
+        reconstruction_origin=reconstruction_origin,
+        isolation=isolation or {},
+        holdout_values=dict(holdouts),
+        tests=results,
+        total_valid=total_valid,
+        passed=passed,
+        failed=failed,
+        invalid=invalid,
+        behavioral_match_rate_percent=rate,
+        meta_api_requests=0,
+        notes=notes + ['suite=calculator; holdouts chosen after reconstruction'],
+    )
+
+
+def run_validation(
+    *,
+    original_origin: str = DEFAULT_ORIGINAL,
+    reconstruction_origin: str = DEFAULT_RECONSTRUCTION,
+    reconstructed_dir: Path,
+    output_dir: Path,
+    isolation: dict[str, Any] | None = None,
+    suite: Literal['taskboard', 'calculator'] = 'taskboard',
+) -> ValidationReport:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if suite == 'calculator':
+        report = run_calculator_validation(
+            original_origin=original_origin,
+            reconstruction_origin=reconstruction_origin,
+            output_dir=output_dir,
+            isolation=isolation,
+        )
+    else:
+        report = run_taskboard_validation(
+            original_origin=original_origin,
+            reconstruction_origin=reconstruction_origin,
+            output_dir=output_dir,
+            isolation=isolation,
+        )
     (output_dir / 'validation_results.json').write_text(
         json.dumps(report.model_dump(mode='json'), indent=2),
         encoding='utf-8',
@@ -493,6 +729,7 @@ def run_phase3_validation(
     reconstructed_dir: Path,
     output_dir: Path,
     original_origin: str = DEFAULT_ORIGINAL,
+    suite: Literal['taskboard', 'calculator'] = 'taskboard',
 ) -> ValidationReport:
     """Start isolated preview if possible, run oracle comparisons, always write a report."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -531,6 +768,7 @@ def run_phase3_validation(
             reconstructed_dir=reconstructed_dir,
             output_dir=output_dir,
             isolation=preview,
+            suite=suite,
         )
     finally:
         # Always attempt container cleanup after validation.

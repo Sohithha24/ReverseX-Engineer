@@ -8,18 +8,36 @@ client = TestClient(app)
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_health_reports_phase4a_and_reconstruction_flag():
+def test_health_reports_phase_and_reconstruction_flag():
     response = client.get('/health')
     assert response.status_code == 200
     body = response.json()
-    assert body['phase'] == '4a'
+    assert body['phase'] == '5c'
     assert body['public'] is False
+    assert 'taskboard' in (body.get('authorized_targets') or [])
+    assert 'calculator' in (body.get('authorized_targets') or [])
     expected = (ROOT / 'artifacts' / 'phase2' / 'reconstructed-app' / 'index.html').is_file()
     assert body['reconstruction_available'] is expected
 
 
+def test_api_targets_allowlist_only():
+    response = client.get('/api/targets')
+    assert response.status_code == 200
+    ids = {t['id'] for t in response.json()['targets']}
+    assert ids == {'taskboard', 'calculator'}
+    for t in response.json()['targets']:
+        assert t['origin'].startswith('http://127.0.0.1:')
+
+
 def test_api_rejects_unknown_mode():
     response = client.post('/api/investigations', json={'mode': 'unlimited'})
+    assert response.status_code == 422
+
+
+def test_api_rejects_unknown_target_id():
+    response = client.post('/api/investigations', json={
+        'mode': 'scripted', 'target_id': 'https://evil.example',
+    })
     assert response.status_code == 422
 
 

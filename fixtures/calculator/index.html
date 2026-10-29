@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Authorized Fixture · MiniCalc</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="panel" data-reversex-original="calculator-v1">
+    <header>
+      <p class="eyebrow">ORIGINAL APP · AUTHORIZED TEST TARGET</p>
+      <h1>MiniCalc</h1>
+      <p class="lede">Two numbers in. One result out.</p>
+    </header>
+
+    <section aria-label="Calculator controls">
+      <label for="num-a">First number</label>
+      <input id="num-a" name="numA" type="text" inputmode="decimal" autocomplete="off" aria-label="First number" />
+
+      <label for="num-b">Second number</label>
+      <input id="num-b" name="numB" type="text" inputmode="decimal" autocomplete="off" aria-label="Second number" />
+
+      <div class="actions">
+        <button type="button" id="btn-add" aria-label="Add">Add</button>
+        <button type="button" id="btn-sub" aria-label="Subtract">Subtract</button>
+        <button type="button" id="btn-reset" aria-label="Reset" class="ghost">Reset</button>
+      </div>
+
+      <p id="message" class="message" role="alert" aria-live="polite"></p>
+      <p class="result-label">Result</p>
+      <p id="result" class="result" aria-live="polite" data-testid="result"></p>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
