@@ -41,6 +41,9 @@ All Meta calls use **httpx** against the Meta Model API (`muse-spark-1.3`). The 
 | FastAPI orchestration | Yes | Local-only, **no auth** |
 | React + TypeScript workspace | Yes | Target selector, validation, repair panel |
 | TaskBoard + MiniCalc targets | Yes | `target_id`: `taskboard` \| `calculator` |
+| ContactPad + IT-Tools allowlisted custom apps | Yes | Understand supported; independent validation only where a suite exists |
+| Simple + Developer reports (shared VerifiedResults) | Yes | Downloadable markdown per job |
+| Saved investigation history (disk-backed) | Yes | `GET /api/investigations` + Results panel |
 | Bounded autonomous repair (max 2 attempts) | Yes | After real validation failures, or labeled controlled eval |
 
 ## Controlled evaluation results
@@ -85,7 +88,7 @@ artifacts/                   local evidence (mostly gitignored)
 frontend/                    React UI → FastAPI (:8000)
 ```
 
-Supported demo targets are **allowlisted** only (`taskboard`, `calculator`). Arbitrary public URLs are rejected.
+Supported demo targets are **allowlisted** only (`taskboard`, `calculator`, `contactpad`, `it-tools` on approved local ports). Arbitrary public URLs are rejected.
 
 ### Autonomous browser investigation
 
@@ -138,6 +141,9 @@ python -m http.server 8001 --bind 127.0.0.1 --directory sample_app
 # B — MiniCalc fixture
 python -m http.server 8003 --bind 127.0.0.1 --directory fixtures/calculator
 
+# Optional — ContactPad fixture
+python -m http.server 8005 --bind 127.0.0.1 --directory fixtures/contactpad
+
 # C — API
 python -m uvicorn reversex.api:app --host 127.0.0.1 --port 8000
 ```
@@ -153,7 +159,14 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
-Zero-Meta smoke path: mode **scripted**, pipeline **full**, TaskBoard with **reuse reconstruction** enabled.
+**Zero-Meta demonstration path (recommended for live demos):**
+
+1. Start Docker Desktop (required for independent validation preview).  
+2. New Investigation → **TaskBoard** → goal **Understand and reconstruct** → mode **Guided Demo**.  
+3. Advanced settings: keep **Reuse existing reconstruction** enabled.  
+4. Launch → wait for **completed** → open Results (Simple + Developer reports).  
+
+Fresh AI Investigation spends Meta credits — use only when intentionally authorized.
 
 ## Docker requirements
 
@@ -169,7 +182,8 @@ cd frontend
 npm run build
 ```
 
-Latest local regression (Phase 6A prep): **71 passed, 1 skipped**; frontend production build **passed**.
+Latest local regression (release readiness 2026-11-04): **149 passed, 2 skipped**; frontend production build **passed**.  
+Latest zero-Meta TaskBoard E2E with Docker validation: job `8307f8d9…` → **completed**, oracle **5/5 (100%)**. See `docs/FINAL_RELEASE_READINESS.md`.
 
 ## Security limitations
 

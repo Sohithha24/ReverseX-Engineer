@@ -1,95 +1,108 @@
 import type { RepairReport } from '../api/types'
+import { EmptyState, StatCard, StatusPill } from './ui'
 
-export function RepairPanel({ repair }: { repair: RepairReport | null }) {
+export function RepairPanel({
+  repair,
+  controlledExample = false,
+}: {
+  repair: RepairReport | null
+  controlledExample?: boolean
+}) {
   if (!repair) {
     return (
-      <p className="muted">
-        No repair results for this job. Repair runs only after real validation failures (or a labeled
-        controlled evaluation).
-      </p>
+      <EmptyState>
+        {controlledExample
+          ? 'The controlled repair example is unavailable right now. Confirm the local backend can serve /api/demo/controlled-repair.'
+          : 'No repair was recorded for this investigation. Repair runs after real validation failures, or you can open the separate Controlled Repair Example.'}
+      </EmptyState>
     )
   }
 
-  const kindLabel =
-    repair.evaluation_kind === 'controlled_fault_injection'
-      ? 'Controlled Repair Evaluation (fault injection — not an organic Muse reconstruction failure)'
-      : 'Pipeline repair after differential validation failures'
+  const isControlled =
+    controlledExample || repair.evaluation_kind === 'controlled_fault_injection'
+  const kindLabel = isControlled ? 'Controlled Repair Example' : 'Investigation repair'
 
   return (
-    <div className="repair-panel">
-      <p className="eyebrow">{kindLabel}</p>
-      <div className="stat-row">
-        <div className="stat">
-          <span className="stat-label">Initial match</span>
-          <strong>
-            {repair.initial_match_rate_percent == null
-              ? '—'
-              : `${repair.initial_match_rate_percent}%`}
-          </strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Final match</span>
-          <strong>
-            {repair.final_match_rate_percent == null
-              ? '—'
-              : `${repair.final_match_rate_percent}%`}
-          </strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Attempts</span>
-          <strong>{repair.attempts?.length ?? 0}</strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Meta requests</span>
-          <strong>{repair.meta_api_requests_total ?? 0}</strong>
-        </div>
-      </div>
-      <p>
-        Status: <span className="mono">{repair.stopped_reason || '—'}</span>
-      </p>
-      {!!repair.initial_failed?.length && (
-        <p>
-          Failed scenarios:{' '}
-          <span className="mono">{repair.initial_failed.join(', ')}</span>
+    <div className="space-y-5">
+      <div className="rounded-[12px] border border-rx-blue/25 bg-rx-blue-soft px-4 py-3">
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-rx-blue">{kindLabel}</p>
+        <p className="mt-1 text-sm text-rx-muted">
+          {isControlled
+            ? 'This example deliberately introduces a defect into a reconstruction so ReverseX can demonstrate detecting and correcting it — not an organically occurring Muse reconstruction failure.'
+            : 'Repair driven by recorded validation failures from this investigation.'}
         </p>
-      )}
-      {(repair.attempts || []).map((a) => (
-        <article key={a.attempt} className="test-card">
-          <header>
-            <h4>Attempt {a.attempt}</h4>
-            <span className={`pill status-${a.status === 'perfect' || a.status === 'improved' ? 'pass' : a.status === 'error' || a.status === 'regressed' ? 'fail' : 'invalid'}`}>
-              {a.status}
-            </span>
-          </header>
-          <p>
-            {a.prior_match_rate_percent ?? '—'}% → {a.new_match_rate_percent ?? '—'}%
-            {a.accepted_as_best ? ' · accepted as best' : ''}
+        <p className="mt-2 text-sm font-medium">{repair.label}</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Initial match"
+          value={
+            repair.initial_match_rate_percent == null ? '—' : `${repair.initial_match_rate_percent}%`
+          }
+        />
+        <StatCard
+          label="Final match"
+          value={repair.final_match_rate_percent == null ? '—' : `${repair.final_match_rate_percent}%`}
+        />
+        <StatCard label="Repair attempts" value={repair.attempts?.length ?? 0} />
+        <StatCard label="Meta requests" value={repair.meta_api_requests_total ?? 0} />
+      </div>
+
+      <div className="text-sm text-rx-muted">
+        <p>
+          Stopped reason: <span className="font-mono text-rx-text">{repair.stopped_reason || '—'}</span>
+        </p>
+        {!!repair.initial_failed?.length && (
+          <p className="mt-2">
+            Failed tests:{' '}
+            <span className="font-mono text-rx-text">{repair.initial_failed.join(', ')}</span>
           </p>
-          {!!a.newly_passed_tests?.length && (
-            <p className="small">Newly passed: {a.newly_passed_tests.join(', ')}</p>
-          )}
-          {!!a.regressed_tests?.length && (
-            <p className="error-text small">Regressed: {a.regressed_tests.join(', ')}</p>
-          )}
-          {!!a.remaining_failures?.length && (
-            <p className="small">Remaining failures: {a.remaining_failures.join(', ')}</p>
-          )}
-          {!!a.changed_files?.length && (
-            <p className="mono small">Changed: {a.changed_files.join(', ')}</p>
-          )}
-          {a.validation_artifact && (
-            <p className="mono small">Evidence: {a.validation_artifact}</p>
-          )}
-          {a.error && <p className="error-text">{a.error}</p>}
-        </article>
-      ))}
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {(repair.attempts || []).map((a) => (
+          <article key={a.attempt} className="rounded-[12px] border border-rx-line bg-white p-4">
+            <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-semibold">Attempt {a.attempt}</h4>
+              <StatusPill status={String(a.status || 'unknown')} />
+            </header>
+            <p className="text-sm tabular-nums">
+              {a.prior_match_rate_percent ?? '—'}% → {a.new_match_rate_percent ?? '—'}%
+              {a.accepted_as_best ? ' · accepted as best' : ''}
+            </p>
+            {!!a.newly_passed_tests?.length && (
+              <p className="mt-2 text-xs text-rx-ok">Newly passed: {a.newly_passed_tests.join(', ')}</p>
+            )}
+            {!!a.regressed_tests?.length && (
+              <p className="mt-1 text-xs text-rx-danger">Regressed: {a.regressed_tests.join(', ')}</p>
+            )}
+            {!!a.remaining_failures?.length && (
+              <p className="mt-1 text-xs text-rx-muted">Remaining: {a.remaining_failures.join(', ')}</p>
+            )}
+            {!!a.changed_files?.length && (
+              <p className="mt-2 font-mono text-xs text-rx-muted">Changed: {a.changed_files.join(', ')}</p>
+            )}
+            {a.error && <p className="mt-2 text-xs text-rx-danger">{a.error}</p>}
+          </article>
+        ))}
+      </div>
+
       {!!repair.notes?.length && (
-        <ul className="diff-list">
+        <ul className="space-y-1 text-xs text-rx-muted">
           {repair.notes.map((n) => (
-            <li key={n}>{n}</li>
+            <li key={n}>• {shortenPathNote(n)}</li>
           ))}
         </ul>
       )}
     </div>
   )
+}
+
+function shortenPathNote(note: string): string {
+  return note.replace(/[A-Za-z]:\\[^\s]+/g, (path) => {
+    const parts = path.split(/[/\\]/)
+    return parts.slice(-3).join('/')
+  })
 }

@@ -33,17 +33,48 @@ class Decision(BaseModel):
 
 
 class VisibleElement(BaseModel):
+    """Structured control observation. Extra fields are optional for backward compatibility."""
+
+    model_config = ConfigDict(extra="ignore")
+
     element_id: str
     kind: str
     label: str
+    value: str | None = None
+    placeholder: str | None = None
+    role: str | None = None
+    input_type: str | None = None
+    disabled: bool = False
+    readonly: bool = False
+    checked: bool | None = None
+    selected: str | None = None
+    href: str | None = None
+    value_redacted: bool = False
+
+
+class ControlValueChange(BaseModel):
+    """Observable before/after difference for a form control — no causal claims."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    element_id_after: str | None = None
+    kind: str
+    label: str
+    field: str
+    before: str | None = None
+    after: str | None = None
 
 
 class PageSnapshot(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     snapshot_id: int
     url: str
     title: str
     visible_text: str
     elements: list[VisibleElement]
+    # Optional delta vs prior snapshot (filled by SafeBrowser.act when applicable).
+    control_changes: list[ControlValueChange] = Field(default_factory=list)
 
 
 class StepResult(BaseModel):

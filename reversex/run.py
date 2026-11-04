@@ -239,11 +239,130 @@ def evaluate_calculator_objectives(events: list[dict]) -> dict:
     return objectives
 
 
+def evaluate_generic_feature_objectives(events: list[dict], feature: str | None = None) -> dict:
+    """Observation-backed goals for allowlisted unfamiliar apps (no invented success)."""
+    objectives = {
+        'feature_controls_observed': {
+            'supported': False,
+            'evidence': None,
+            'feature': feature,
+        },
+        'feature_interaction_attempted': {
+            'supported': False,
+            'evidence': None,
+        },
+        'page_response_observed': {
+            'supported': False,
+            'evidence': None,
+        },
+    }
+    for event in events:
+        if event.get('status') != 'ok':
+            continue
+        before = event.get('before') or {}
+        after = event.get('after') or {}
+        decision = event.get('decision') or {}
+        action = decision.get('action')
+        elements = before.get('elements') or []
+        if elements:
+            objectives['feature_controls_observed'] = {
+                'supported': True,
+                'evidence': f'step {event.get("step")}: visible interactive controls were present',
+                'feature': feature,
+            }
+        if action in ('fill', 'click') and event.get('status') == 'ok':
+            objectives['feature_interaction_attempted'] = {
+                'supported': True,
+                'evidence': f'step {event.get("step")}: performed {action} on a visible control',
+            }
+        before_text = (before.get('visible_text') or '')
+        after_text = (after.get('visible_text') or '')
+        control_changes = after.get('control_changes') or event.get('control_changes') or []
+        if after_text and after_text != before_text:
+            objectives['page_response_observed'] = {
+                'supported': True,
+                'evidence': f'step {event.get("step")}: page text changed after the action',
+            }
+        elif control_changes:
+            objectives['page_response_observed'] = {
+                'supported': True,
+                'evidence': (
+                    f'step {event.get("step")}: {len(control_changes)} control value/state '
+                    f'change(s) recorded after the action'
+                ),
+            }
+        else:
+            # Fallback: compare structured element values when control_changes absent (older artifacts).
+            def _vals(snap: dict) -> set[tuple[str, str, str]]:
+                out: set[tuple[str, str, str]] = set()
+                for el in snap.get('elements') or []:
+                    if el.get('value_redacted'):
+                        continue
+                    out.add(
+                        (
+                            str(el.get('kind') or ''),
+                            str(el.get('label') or ''),
+                            str(el.get('value') if el.get('value') is not None else el.get('selected') or ''),
+                        )
+                    )
+                return out
+
+            if after.get('elements') and _vals(before) != _vals(after):
+                objectives['page_response_observed'] = {
+                    'supported': True,
+                    'evidence': f'step {event.get("step")}: structured control values changed after the action',
+                }
+    return objectives
+
+
 def evaluate_objectives(events: list[dict], target: AppTarget | None = None) -> dict:
     profile = target or get_target('taskboard')
     if profile.id == 'calculator':
         return evaluate_calculator_objectives(events)
-    return evaluate_taskboard_objectives(events)
+    if profile.id == 'taskboard':
+        return evaluate_taskboard_objectives(events)
+    return evaluate_generic_feature_objectives(events, feature=profile.feature_label)
+
+
+def scripted_generic_decision(snapshot, step: int, feature: str | None = None):
+    """Deterministic exploration for allowlisted unfamiliar apps. NOT an autonomous AI agent."""
+    inputs = [el for el in snapshot.elements if el.kind in ('input', 'textarea')]
+    buttons = [el for el in snapshot.elements if el.kind == 'button']
+    submit = next(
+        (
+            el.element_id
+            for el in buttons
+            if any(token in el.label.lower() for token in ('send', 'submit', 'save', 'create', 'add', 'ok'))
+        ),
+        buttons[0].element_id if buttons else None,
+    )
+    # Probe values — not application-specific oracles.
+    probes = ['Alex Example', 'alex@example.com', 'Hello from ReverseX guided demo']
+    if step == 0:
+        return Decision(action='observe', reason=f'Observe page for feature: {feature or "selected feature"}')
+    if step == 1 and inputs:
+        return Decision(
+            action='fill',
+            element_id=inputs[0].element_id,
+            value='',
+            reason='Offline scripted empty first-field probe',
+        )
+    if step == 2 and submit:
+        return Decision(action='click', element_id=submit, reason='Offline scripted submit with empty required fields')
+    fill_index = step - 3
+    if 0 <= fill_index < len(inputs):
+        value = probes[fill_index] if fill_index < len(probes) else f'probe-{fill_index + 1}'
+        return Decision(
+            action='fill',
+            element_id=inputs[fill_index].element_id,
+            value=value,
+            reason=f'Offline scripted fill field {fill_index + 1} for feature exploration',
+        )
+    if step == 3 + len(inputs) and submit:
+        return Decision(action='click', element_id=submit, reason='Offline scripted submit after fills')
+    if step == 4 + len(inputs):
+        return Decision(action='reload', reason='Offline scripted reload persistence check')
+    return Decision(action='stop', reason='Offline generic scripted exploration finished')
 
 
 def finalize_status(
@@ -283,19 +402,35 @@ def explore(
     output_dir: str = 'artifacts',
     max_actions: int = 12,
     target_id: str | None = None,
+    feature: str | None = None,
+    target: AppTarget | None = None,
 ):
     load_dotenv()
     from reversex.browser import validate_target
+    from reversex.targets import resolve_authorized_application
+
     if mode not in ('scripted', 'muse'):
         raise ValueError('mode must be scripted or muse')
     if max_actions < 1 or max_actions > 20:
         raise ValueError('max_actions must be between 1 and 20')
-    target = get_target(target_id)
-    origin = target.origin
-    # Optional env override only when investigating the default taskboard target.
-    if target.id == 'taskboard':
-        origin = os.getenv('REVERSEX_ALLOWED_ORIGIN', origin)
-    dest = url or origin
+
+    if target is None:
+        target, dest = resolve_authorized_application(
+            application_url=url,
+            target_id=target_id,
+            feature=feature,
+        )
+    else:
+        dest = url or (target.origin.rstrip('/') + '/')
+    origin = target.origin.rstrip('/')
+    # Optional env override only when investigating the default taskboard target without an explicit URL.
+    if target.id == 'taskboard' and not url:
+        env_origin = os.getenv('REVERSEX_ALLOWED_ORIGIN')
+        if env_origin:
+            from reversex.targets import normalize_origin
+
+            origin = normalize_origin(env_origin)
+            dest = origin + '/'
     validate_target(dest, origin)
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -330,8 +465,10 @@ def explore(
                         decision = planner.decide(snapshot, history)
                     elif target.id == 'calculator':
                         decision = scripted_calculator_decision(snapshot, step)
-                    else:
+                    elif target.id == 'taskboard':
                         decision = scripted_decision(snapshot, step)
+                    else:
+                        decision = scripted_generic_decision(snapshot, step, feature=target.feature_label)
                     if planner is not None:
                         api_requests = planner.request_count
                     record = {
@@ -349,9 +486,24 @@ def explore(
                         break
                     snapshot = next_snapshot
                 except Exception as exc:
-                    # Do not auto-retry state-changing actions after ambiguous failure.
+                    # Do not auto-retry state-changing browser actions after ambiguous failure.
+                    # Previous successful history entries are preserved above.
                     errored = True
-                    history.append({'step': step + 1, 'status': 'error', 'error': str(exc)[:240]})
+                    err_rec: dict = {
+                        'step': step + 1,
+                        'status': 'error',
+                        'error': str(exc)[:240],
+                    }
+                    kind = getattr(exc, 'kind', None)
+                    diag = getattr(exc, 'diagnostics', None)
+                    if kind:
+                        err_rec['error_kind'] = str(kind)[:80]
+                    if isinstance(diag, dict) and diag:
+                        # Already sanitized by MuseDecisionError path when present.
+                        err_rec['error_diagnostics'] = {
+                            k: diag[k] for k in list(diag)[:12] if k != 'Authorization'
+                        }
+                    history.append(err_rec)
                     break
             else:
                 budget_hit = True
@@ -382,6 +534,11 @@ def explore(
         'mode': mode,
         'target_id': target.id,
         'feature': target.feature_label,
+        'target_label': target.label or target.id,
+        'validation_suite': target.validation_suite,
+        'independent_validation_available': bool(
+            target.supports_independent_validation and target.validation_suite
+        ),
         'note': ('Offline scripted browser smoke test — not AI-led investigation' if mode == 'scripted'
                  else 'Live Muse Spark requested; review event logs to verify model behavior'),
         'target': dest,
@@ -391,7 +548,11 @@ def explore(
         'api_request_count': api_requests if mode == 'muse' else 0,
         'objectives': objectives,
         'events': history,
-        'not_implemented': ['behavioral specification', 'code reconstruction', 'oracle-based validation'],
+        'not_implemented': (
+            []
+            if target.supports_independent_validation
+            else ['oracle-based independent validation for this custom application']
+        ),
     }
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     return report
@@ -401,11 +562,23 @@ def main():
     parser = argparse.ArgumentParser(description='ReverseX Engineer Phase 1b browser explorer')
     parser.add_argument('--mode', choices=['scripted', 'muse'], default='scripted')
     parser.add_argument('--url', default=None)
-    parser.add_argument('--target', default='taskboard', choices=['taskboard', 'calculator'])
+    parser.add_argument(
+        '--target',
+        default='taskboard',
+        choices=['taskboard', 'calculator', 'contactpad', 'it-tools'],
+    )
+    parser.add_argument('--feature', default=None)
     parser.add_argument('--max-actions', type=int, default=12)
     parser.add_argument('--output-dir', default='artifacts')
     args = parser.parse_args()
-    report = explore(args.mode, args.url, args.output_dir, args.max_actions, target_id=args.target)
+    report = explore(
+        args.mode,
+        args.url,
+        args.output_dir,
+        args.max_actions,
+        target_id=args.target,
+        feature=args.feature,
+    )
     summary = {k: v for k, v in report.items() if k != 'events'}
     print(json.dumps(summary, indent=2))
     print(f"Steps recorded: {len(report['events'])}. Full report: {args.output_dir}/report.json")

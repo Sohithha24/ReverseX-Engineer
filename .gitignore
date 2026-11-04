@@ -52,3 +52,18 @@ Thumbs.db
 # Playwright / browser caches (local)
 playwright-report/
 test-results/
+
+# Demo production intermediates / large media (keep scripts + reports)
+demo/raw/
+demo/audio/
+demo/work/
+demo/frames/
+demo/*.mp4
+demo/*.webm
+demo/*.wav
+demo/*.mp3
+demo/assembly_meta.json
+
+# Local agent / IDE scratch
+.cursor/
+agent-transcripts/

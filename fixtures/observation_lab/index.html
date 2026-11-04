@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Observation Lab</title>
+</head>
+<body>
+  <h1>Observation Lab</h1>
+  <p id="status">idle</p>
+  <label>Plain input <input id="plain" name="plain" placeholder="Type here" /></label>
+  <label>Password <input id="secret" name="password" type="password" placeholder="secret" /></label>
+  <label>Disabled <input id="disabled" name="disabled" value="locked" disabled /></label>
+  <label>Readonly <input id="readonly" name="readonly" value="fixed" readonly /></label>
+  <label>Notes <textarea id="notes" name="notes" placeholder="Notes…"></textarea></label>
+  <label>Result <textarea id="result" name="result" placeholder="Result…" readonly></textarea></label>
+  <label>Choice
+    <select id="choice" name="choice">
+      <option value="a">Alpha</option>
+      <option value="b">Beta</option>
+    </select>
+  </label>
+  <label><input id="tog" name="tog" type="checkbox" /> Enable</label>
+  <button id="go" type="button">Compute</button>
+  <a id="same" href="/">Home link</a>
+  <script>
+    const notes = document.getElementById('notes');
+    const result = document.getElementById('result');
+    const status = document.getElementById('status');
+    notes.addEventListener('input', () => {
+      result.value = notes.value ? ('OUT:' + notes.value) : '';
+      status.textContent = notes.value ? 'updated' : 'idle';
+    });
+    document.getElementById('go').addEventListener('click', () => {
+      status.textContent = 'clicked';
+    });
+  </script>
+</body>
+</html>

@@ -1,70 +1,68 @@
 # ReverseX Engineer — Hackathon Release Checklist
 
-Evidence dated for Phase 6A prep (local machine). Update checkboxes only with actual verification.
+Updated for release readiness **2026-11-04** (local verification). Checkboxes reflect actual runs on this machine.
 
 ## GitHub repository review
 
-- [x] Remote exists: `https://github.com/Sohithha24/ReverseX-Engineer`
-- [x] Default branch `main` tracks `origin/main`
-- [x] Visibility remains **PRIVATE** (`gh repo view` → `isPrivate: true`) — do not flip public until submission rules require it
-- [ ] Public visibility change (only if hackathon requires public repo) — **not done**
-- [ ] Hackathon portal submission links filed — **not done**
+- [ ] Confirm remote URL and that intended branch contains all demo work
+- [ ] Keep repository **PRIVATE** until hackathon rules require public
+- [ ] Hackathon portal submission links filed
+- [ ] **Commit** all intended product/docs changes on `ui/hackathon-redesign` (or merge to `main`) before push — large uncommitted set was present at readiness time
 
 ## Credential scan
 
 - [x] `.gitignore` preserves `.env`, `artifacts/**`, `.venv/`, `node_modules/`
-- [x] Working `.env` / `frontend/.env` are ignored (`git check-ignore`)
+- [x] Working `.env` / `frontend/.env` ignored (`git check-ignore`)
 - [x] Tracked env templates only: `.env.example`, `frontend/.env.example` (empty `MODEL_API_KEY=`)
-- [x] No `.env` in git history as a committed secret file (only `.env.example` added in initial commit)
-- [x] Pre-commit style scan: `scripts/scan_staged_secrets.py` available; run after staging
-- [x] Residual Docker risk documented in README (bridge ≠ full sandbox)
+- [x] `scripts/scan_staged_secrets.py` available — run **after staging**, before commit
+- [x] Residual Docker bridge risk documented in README
 
-## Regression tests
+## Regression tests (2026-11-04 readiness)
 
-- [x] `pytest -q` → **71 passed, 1 skipped** (Phase 6A prep run)
-- [x] `frontend` `npm run build` (`tsc -b && vite build`) → **passed**
-- [x] API `GET /health` → `status=ok`, `phase=5c`, targets listed
-- [x] `GET /api/targets` → `taskboard`, `calculator` only
+- [x] `pytest -q` → **149 passed, 2 skipped**
+- [x] `frontend` `npm run build` → **passed**
+- [x] API `GET /health` → `status=ok`
+- [x] Playwright Chromium launches
+- [x] Docker Desktop ready for validation
+
+## Full demo workflow (zero Meta spend)
+
+- [x] TaskBoard Guided Demo + Understand and reconstruct
+- [x] Reconstruction reused
+- [x] Independent validation with Docker isolation **running**
+- [x] Oracle **5/5 (100%)** — job `8307f8d9aa304926b57f91de7171bc9a` status **completed**
+- [x] Simple + Developer report endpoints return content
+- [x] Saved investigations lists and reopens the job
+- [ ] Optional: Fresh Muse investigation video (costs credits) — not required for Guided Demo path
 
 ## Frontend / local demo verification
 
-- [x] TaskBoard in application selector
-- [x] MiniCalc in application selector; origin switches to `:8003`; reuse disabled
-- [x] Deep-link MiniCalc job shows `completed`, calc validation cards, EvidenceGraph sources
-- [x] Validation data from backend (not hardcoded scores)
-- [x] Screenshots listed for MiniCalc job (12 PNGs via API)
-- [x] Controlled Repair Evaluation labeled; shows **60% → 100%**
-- [x] `completed` / `incomplete` / `failed` remain distinct in timeline
-- [ ] Full live Muse end-to-end re-run for video (optional; costs Meta credits) — **not required for checklist if prerecorded**
+- [x] Understand / Understand and reconstruct goals visible for sample + URL entry
+- [x] Guided Demo vs Fresh AI Investigation clearly labeled
+- [x] Controlled Repair Example remains labeled fault injection (60% → 100%)
+- [x] Deep-link `?job=` and history Open work for finalized jobs
 
 ## Docker readiness
 
-- [x] Docker used successfully in prior Phase 5B/5C validation (`isolation: running`)
-- [ ] Confirm Docker Desktop running immediately before any live validation demo
+- [x] Docker Desktop running during readiness E2E
+- [x] Validation isolation status `running` on release job
 - [x] README states bridge fallback residual risk
 
-## Demo video
+## Demo video / portal
 
-- [x] Script written: `docs/DEMO_SCRIPT.md` (≤3 minutes)
-- [ ] Screen recording exported — **not done**
-- [ ] Video uploaded / linked for submission — **not done**
+- [x] Script: `docs/DEMO_SCRIPT.md`
+- [ ] Screen recording exported
+- [ ] Video uploaded / linked for submission
+- [ ] Final readiness summary: `docs/FINAL_RELEASE_READINESS.md`
 
-## README
-
-- [x] Updated for Phases 5B–5C (targets, repair, truthful limits)
-- [x] Controlled repair clearly labeled as fault injection on a copy
-
-## Final deadline / submission
-
-- [ ] Confirm Meta hackathon deadline and required public/private state
-- [ ] Attach demo video + repo URL in submission form
-- [ ] Final private→public decision per event rules
-
-## Push gate
+## Push gate (do not skip)
 
 Only push after:
 
-1. Secrets scan on staged files = clean  
-2. pytest + frontend build green  
-3. No force-push  
-4. Visibility unchanged unless intentionally required  
+1. Intentional `git add` of source/docs (never `.env` / raw job `artifacts/`)  
+2. `python scripts/scan_staged_secrets.py` = clean  
+3. pytest + frontend build green  
+4. No force-push unless explicitly required  
+5. Visibility unchanged unless intentionally required  
+
+**No push was performed during automated readiness preparation.**

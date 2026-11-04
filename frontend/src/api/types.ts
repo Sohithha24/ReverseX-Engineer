@@ -24,19 +24,41 @@ export interface HealthResponse {
   note?: string
 }
 
-export type TargetId = 'taskboard' | 'calculator'
+export type TargetId = string
+export type InvestigationGoal = 'understand' | 'understand_and_reconstruct'
 
 export interface AuthorizedTarget {
   id: TargetId
   label: string
   origin: string
   description: string
-  validation_suite: string
+  validation_suite: string | null
   reuse_reconstruction_allowed: boolean
+  kind?: string
+  independent_validation_available?: boolean
 }
 
 export interface TargetsResponse {
   targets: AuthorizedTarget[]
+  authorized_origins?: Array<{
+    target_id: string
+    label: string
+    origin: string
+    validation_available?: boolean
+    kind?: string
+  }>
+}
+
+export interface ResolveTargetResponse {
+  approved: boolean
+  target_id: string
+  label: string
+  origin: string
+  application_url: string
+  feature: string
+  kind?: string
+  independent_validation_available?: boolean
+  message?: string
 }
 
 export interface CreateInvestigationRequest {
@@ -44,8 +66,11 @@ export interface CreateInvestigationRequest {
   pipeline: Pipeline
   reuse_reconstruction: boolean
   max_actions: number
-  /** Authorized fixture; defaults to taskboard on the API. */
+  /** Authorized fixture sample id when not using application_url. */
   target_id?: TargetId
+  application_url?: string
+  feature?: string
+  investigation_goal?: InvestigationGoal
 }
 
 export interface InvestigationSummary {
@@ -54,6 +79,9 @@ export interface InvestigationSummary {
   mode?: string | null
   pipeline?: string | null
   target_id?: string | null
+  feature?: string | null
+  application_url?: string | null
+  investigation_goal?: string | null
   queued_at?: string | null
   updated_at?: string | null
   stages?: Record<string, unknown>
@@ -192,4 +220,138 @@ export interface ValidationResultsFile {
   tests?: ValidationTestCase[]
   isolation?: Record<string, unknown>
   holdout_values?: Record<string, string>
+}
+
+export type VerificationStatus =
+  | 'verified'
+  | 'partially_verified'
+  | 'not_verified'
+  | 'contradicted'
+  | 'requires_review'
+
+export interface EvidenceReference {
+  ref_id: string
+  kind: string
+  location: string
+  note?: string | null
+  available?: boolean
+}
+
+export interface VerifiedFinding {
+  claim_id: string
+  investigation_id: string
+  target_application?: string | null
+  feature_investigated?: string | null
+  claim_category: string
+  claim_text: string
+  supporting_evidence: EvidenceReference[]
+  contradictory_evidence: EvidenceReference[]
+  verification_status: VerificationStatus
+  verification_scope: string
+  limitations: string[]
+  related_test_ids: string[]
+  timestamps: string[]
+  problem_category?: string | null
+  rule_id?: string | null
+}
+
+export interface VerifiedResults {
+  investigation_id: string
+  generated_at: string
+  availability: 'complete' | 'partial' | 'unavailable'
+  target_application?: string | null
+  feature_investigated?: string | null
+  investigation_mode?: string | null
+  pipeline?: string | null
+  investigation_status?: string | null
+  metadata?: Record<string, unknown>
+  verified_findings: VerifiedFinding[]
+  partially_verified_findings: VerifiedFinding[]
+  unsupported_findings: VerifiedFinding[]
+  contradicted_findings: VerifiedFinding[]
+  requires_review_findings: VerifiedFinding[]
+  contradictions: Array<{
+    contradiction_id: string
+    description: string
+    claim_text: string
+    expected: string
+    observed: string
+    evidence?: EvidenceReference[]
+    decidable?: boolean
+  }>
+  problems: Array<{
+    problem_id: string
+    category: string
+    description: string
+    related_test_ids?: string[]
+    notes?: string[]
+  }>
+  untested_behaviors: string[]
+  reconstruction_status?: Record<string, unknown> | null
+  validation_summary?: {
+    passed?: number | null
+    failed?: number | null
+    invalid?: number | null
+    total_valid?: number | null
+    behavioral_match_rate_percent?: number | null
+    isolation_status?: string | null
+  } | null
+  repair_summary?: {
+    evaluation_kind?: string
+    label?: string
+    initial_match_rate_percent?: number | null
+    final_match_rate_percent?: number | null
+    stopped_reason?: string
+    attempts?: number
+  } | null
+  coverage_limitations: string[]
+  evidence_index?: EvidenceReference[]
+  notes?: string[]
+}
+
+export interface TimelineItem {
+  step: string
+  action: string
+  what_reversex_did: string
+  what_happened: string
+  what_that_shows: string
+  recorded_purpose: string
+}
+
+export interface FailureExplanation {
+  test_id: string
+  status: string
+  what_we_tested: string
+  original_did: string
+  reconstruction_did: string
+  what_was_different: string
+  why_it_matters: string
+  repair_attempted?: string
+  repair_result?: string
+}
+
+export interface HowWeKnowItem {
+  title: string
+  status: string
+  scope: string
+  evidence: string
+  tests: string
+}
+
+export interface HumanReportResponse {
+  verified: VerifiedResults
+  timeline: TimelineItem[]
+  failures: FailureExplanation[]
+  how_we_know: HowWeKnowItem[]
+  status_labels: Record<string, string>
+  status_help: Record<string, string>
+  investigation_note?: string | null
+  api_request_count?: number | null
+  specification_present?: boolean
+  requirements?: Array<{
+    id?: string
+    kind?: string
+    observed_result?: string
+    action_performed?: string
+  }>
 }

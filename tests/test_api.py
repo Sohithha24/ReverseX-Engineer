@@ -24,7 +24,7 @@ def test_api_targets_allowlist_only():
     response = client.get('/api/targets')
     assert response.status_code == 200
     ids = {t['id'] for t in response.json()['targets']}
-    assert ids == {'taskboard', 'calculator'}
+    assert ids == {'taskboard', 'calculator', 'contactpad', 'it-tools'}
     for t in response.json()['targets']:
         assert t['origin'].startswith('http://127.0.0.1:')
 
@@ -38,14 +38,16 @@ def test_api_rejects_unknown_target_id():
     response = client.post('/api/investigations', json={
         'mode': 'scripted', 'target_id': 'https://evil.example',
     })
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_api_rejects_arbitrary_target_urls():
     response = client.post('/api/investigations', json={
-        'mode': 'scripted', 'url': 'https://example.com'
+        'mode': 'scripted',
+        'application_url': 'https://example.com',
+        'feature': 'anything',
     })
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_api_rejects_invalid_job_id():
@@ -65,6 +67,23 @@ def test_demo_evidence_graph_from_preserved_artifacts():
 def test_get_missing_investigation_404():
     response = client.get('/api/investigations/' + ('a' * 32))
     assert response.status_code == 404
+
+
+def test_list_investigations_includes_disk_artifacts():
+    response = client.get('/api/investigations?limit=20')
+    assert response.status_code == 200
+    body = response.json()
+    assert 'investigations' in body
+    assert isinstance(body['investigations'], list)
+    assert body['count'] == len(body['investigations'])
+    # Known IT-Tools Muse evaluation artifact should appear when present on disk.
+    known = 'c3f925d4254d4ba586cf886daf9e61c7'
+    if (ROOT / 'artifacts' / known / 'final_report.json').is_file():
+        ids = {item['id'] for item in body['investigations']}
+        assert known in ids
+        item = next(i for i in body['investigations'] if i['id'] == known)
+        assert item.get('target_id') == 'it-tools'
+        assert item.get('status') in {'failed', 'completed', 'incomplete', 'error'}
 
 
 def test_screenshot_endpoint_rejects_path_traversal():

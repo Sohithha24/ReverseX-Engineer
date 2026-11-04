@@ -170,7 +170,9 @@ def test_repair_report_status_shape():
 
 
 def test_api_targets_only_allowlisted():
-    ids = {t.id for t in [get_target('taskboard'), get_target('calculator')]}
-    assert ids == {'taskboard', 'calculator'}
+    from reversex.targets import list_target_ids
+
+    ids = set(list_target_ids())
+    assert ids == {'taskboard', 'calculator', 'contactpad', 'it-tools'}
     with pytest.raises(ValueError):
         get_target('https://evil.example')

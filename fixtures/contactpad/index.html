@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ContactPad</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="shell">
+    <p class="eyebrow">Authorized local test application</p>
+    <h1>ContactPad</h1>
+    <p class="lede">
+      A deliberately small contact form for ReverseX custom-application investigation.
+      It is not TaskBoard and not MiniCalc.
+    </p>
+
+    <form id="contact-form" novalidate>
+      <label>
+        Full name
+        <input id="name" name="name" type="text" placeholder="Full name" autocomplete="off" />
+      </label>
+      <label>
+        Email
+        <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="off" />
+      </label>
+      <label>
+        Message
+        <textarea id="message" name="message" rows="4" placeholder="How can we help?"></textarea>
+      </label>
+      <div class="actions">
+        <button type="submit" id="send">Send message</button>
+        <button type="button" id="reset">Clear form</button>
+      </div>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite">No message sent yet.</p>
+    <ul id="history" class="history" aria-label="Sent messages"></ul>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

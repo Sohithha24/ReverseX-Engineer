@@ -1,7 +1,92 @@
-html, body, #root {
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+
+  /* Warm light palette */
+  --color-rx-bg: #fdfcf9;
+  --color-rx-beige: #f3f0e8;
+  --color-rx-panel: #ffffff;
+  --color-rx-panel-2: #f3f0e8;
+  --color-rx-line: #e6e5df;
+  --color-rx-text: #263238;
+  --color-rx-muted: #78817d;
+
+  --color-rx-sage: #477a63;
+  --color-rx-sage-soft: #ddebdd;
+  --color-rx-blue: #315f86;
+  --color-rx-blue-soft: #e6f0fa;
+
+  /* Legacy aliases remapped for existing class names */
+  --color-rx-violet: #315f86;
+  --color-rx-violet-dim: #274c6b;
+  --color-rx-cyan: #477a63;
+
+  --color-rx-ok: #477a63;
+  --color-rx-warn: #b45309;
+  --color-rx-danger: #b42318;
+}
+
+html,
+body,
+#root {
   min-height: 100%;
 }
 
 body {
   margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-rx-text);
+  background: var(--color-rx-bg);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-rx-blue-soft) 80%, white);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-rx-blue);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d5d2c8;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* React Flow light canvas */
+.react-flow__background {
+  background: #ffffff !important;
+}
+.react-flow__controls {
+  box-shadow: 0 1px 3px rgba(38, 50, 56, 0.08);
+  border: 1px solid var(--color-rx-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--color-rx-line) !important;
+  fill: #263238 !important;
+}
+.react-flow__minimap {
+  border: 1px solid var(--color-rx-line) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
 }

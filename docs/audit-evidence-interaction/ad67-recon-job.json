@@ -1,0 +1,81 @@
+﻿{
+    "id":  "ad67eaf32517432792e933bd815403e0",
+    "status":  "incomplete",
+    "mode":  "scripted",
+    "pipeline":  "full",
+    "target_id":  "taskboard",
+    "feature":  "Add task / TaskBoard visible behavior",
+    "application_url":  "http://127.0.0.1:8001/",
+    "investigation_goal":  "understand_and_reconstruct",
+    "queued_at":  "2026-11-04T20:39:30.147479+00:00",
+    "updated_at":  "2026-11-04T20:39:40.094903+00:00",
+    "stages":  {
+                   "investigation":  {
+                                         "executed":  true,
+                                         "status":  "completed",
+                                         "artifact":  "ad67eaf32517432792e933bd815403e0/investigation/report.json",
+                                         "duration_seconds":  5.59,
+                                         "api_request_count":  0,
+                                         "target_id":  "taskboard",
+                                         "feature":  "Add task / TaskBoard visible behavior",
+                                         "application_url":  "http://127.0.0.1:8001/"
+                                     },
+                   "specification":  {
+                                         "executed":  true,
+                                         "status":  "frozen",
+                                         "artifact":  "ad67eaf32517432792e933bd815403e0/specification/behavior_spec.frozen.json",
+                                         "observation_requirements":  [
+                                                                          "REQ-EMPTY-SUBMIT",
+                                                                          "REQ-VALID-CREATE",
+                                                                          "REQ-RELOAD-PERSIST"
+                                                                      ]
+                                     },
+                   "reconstruction":  {
+                                          "executed":  true,
+                                          "status":  "reused",
+                                          "artifact":  "ad67eaf32517432792e933bd815403e0/reconstructed-app/",
+                                          "files":  [
+                                                        "index.html",
+                                                        "script.js",
+                                                        "style.css"
+                                                    ],
+                                          "meta_api_requests":  0,
+                                          "note":  "Reused existing Phase 2 reconstruction; did not overwrite artifacts/phase2/reconstructed-app"
+                                      },
+                   "validation":  {
+                                      "executed":  true,
+                                      "status":  "blocked",
+                                      "artifact":  "ad67eaf32517432792e933bd815403e0/validation/validation_results.json",
+                                      "passed":  0,
+                                      "failed":  0,
+                                      "invalid":  0,
+                                      "total_valid":  0,
+                                      "behavioral_match_rate_percent":  null,
+                                      "isolation":  {
+                                                        "status":  "blocked",
+                                                        "reason":  "Adequate isolation unavailable. docker daemon unavailable: failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.. Refusing to serve untrusted reconstructed JavaScript via bare host http.server. Files were saved for offline inspection and Phase 3 differential testing.",
+                                                        "url":  null,
+                                                        "isolation":  "none",
+                                                        "files_ready":  true,
+                                                        "suggested_url_if_isolated":  "http://127.0.0.1:8002/"
+                                                    },
+                                      "meta_api_requests":  0,
+                                      "suite":  "taskboard"
+                                  },
+                   "repair":  {
+                                  "executed":  false,
+                                  "status":  "skipped",
+                                  "note":  "No failed validation scenarios â repair not invoked"
+                              }
+               },
+    "errors":  [
+                   "validation blocked or unavailable"
+               ],
+    "artifacts":  {
+                      "root":  "artifacts/ad67eaf32517432792e933bd815403e0/",
+                      "evidence_graph":  "ad67eaf32517432792e933bd815403e0/evidence_graph.json",
+                      "report":  "ad67eaf32517432792e933bd815403e0/final_report.json"
+                  },
+    "meta_api_requests_total":  0,
+    "error":  null
+}
