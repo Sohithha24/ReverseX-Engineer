@@ -1,0 +1,34 @@
+﻿{
+    "id":  "49d497c8ee784f50aaaa91f1398fc10e",
+    "status":  "failed",
+    "mode":  "muse",
+    "pipeline":  "investigate_only",
+    "target_id":  "it-tools",
+    "feature":  "Base64 text encoding and decoding",
+    "application_url":  "http://127.0.0.1:8010/base64-string-converter",
+    "investigation_goal":  "understand",
+    "queued_at":  "2026-11-04T06:52:15.807288+00:00",
+    "updated_at":  "2026-11-04T06:52:19.773505+00:00",
+    "stages":  {
+                   "investigation":  {
+                                         "executed":  true,
+                                         "status":  "error",
+                                         "artifact":  "49d497c8ee784f50aaaa91f1398fc10e/investigation/report.json",
+                                         "duration_seconds":  3.94,
+                                         "api_request_count":  0,
+                                         "target_id":  "it-tools",
+                                         "feature":  "Base64 text encoding and decoding",
+                                         "application_url":  "http://127.0.0.1:8010/base64-string-converter"
+                                     }
+               },
+    "errors":  [
+                   "investigation ended with error"
+               ],
+    "artifacts":  {
+                      "root":  "artifacts/49d497c8ee784f50aaaa91f1398fc10e/",
+                      "evidence_graph":  null,
+                      "report":  "49d497c8ee784f50aaaa91f1398fc10e/final_report.json"
+                  },
+    "meta_api_requests_total":  0,
+    "error":  null
+}

@@ -1,0 +1,257 @@
+{
+  "origin": "http://127.0.0.1:8010",
+  "role": "evaluator_compatibility_probe",
+  "muse_called": false,
+  "pages": [
+    {
+      "url": "http://127.0.0.1:8010/",
+      "title": "IT Tools - Handy online tools for developers",
+      "visible_text_excerpt": "IT - TOOLS Handy tools for developers Crypto Token generator Hash text Bcrypt UUIDs generator ULID generator Encrypt / decrypt text BIP39 passphrase generator Hmac generator RSA key pair generator Password strength analyser PDF signature checker Converter Date-time converter Integer base converter Roman numeral converter Base64 string encoder/decoder Base64 file converter Color converter Case converter Text to NATO alphabet Text to ASCII binary Text to Unicode YAML to JSON converter YAML to TOML",
+      "safe_browser_like_controls": [
+        {
+          "kind": "button",
+          "label": "Toggle menu"
+        },
+        {
+          "kind": "button",
+          "label": "Search\nCtrl\u00a0+\u00a0K"
+        },
+        {
+          "kind": "button",
+          "label": "Toggle dark/light mode"
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "button",
+          "label": ""
+        }
+      ],
+      "anchor_count": 182
+    },
+    {
+      "reached": true,
+      "tried_urls": [
+        "http://127.0.0.1:8010/base64-string-converter"
+      ],
+      "final_url": "http://127.0.0.1:8010/base64-string-converter",
+      "title": "Base64 string encoder/decoder - IT Tools",
+      "visible_text_excerpt": "IT - TOOLS Handy tools for developers Crypto Token generator Hash text Bcrypt UUIDs generator ULID generator Encrypt / decrypt text BIP39 passphrase generator Hmac generator RSA key pair generator Password strength analyser PDF signature checker Converter Date-time converter Integer base converter Roman numeral converter Base64 string encoder/decoder Base64 file converter Color converter Case converter Text to NATO alphabet Text to ASCII binary Text to Unicode YAML to JSON converter YAML to TOML JSON to YAML converter JSON to TOML List converter TOML to JSON TOML to YAML XML to JSON JSON to XML Markdown to HTML Web Encode/decode URL-formatted strings Escape HTML entities URL parser Device in",
+      "safe_browser_like_controls": [
+        {
+          "kind": "button",
+          "label": "Toggle menu"
+        },
+        {
+          "kind": "button",
+          "label": "Search\nCtrl\u00a0+\u00a0K"
+        },
+        {
+          "kind": "button",
+          "label": "Toggle dark/light mode"
+        },
+        {
+          "kind": "button",
+          "label": ""
+        },
+        {
+          "kind": "textarea",
+          "label": "Put your string here..."
+        },
+        {
+          "kind": "textarea",
+          "label": "The base64 encoding of your string will be here"
+        },
+        {
+          "kind": "button",
+          "label": "Copy base64"
+        },
+        {
+          "kind": "textarea",
+          "label": "Your base64 string..."
+        },
+        {
+          "kind": "textarea",
+          "label": "The decoded string will be here"
+        },
+        {
+          "kind": "button",
+          "label": "Copy decoded string"
+        }
+      ],
+      "after_fill_excerpt": "IT - TOOLS Handy tools for developers Crypto Token generator Hash text Bcrypt UUIDs generator ULID generator Encrypt / decrypt text BIP39 passphrase generator Hmac generator RSA key pair generator Password strength analyser PDF signature checker Converter Date-time converter Integer base converter Roman numeral converter Base64 string encoder/decoder Base64 file converter Color converter Case converter Text to NATO alphabet Text to ASCII binary Text to Unicode YAML to JSON converter YAML to TOML JSON to YAML converter JSON to TOML List converter TOML to JSON TOML to YAML XML to JSON JSON to XML Markdown to HTML Web Encode/decode URL-formatted strings Escape HTML entities URL parser Device in",
+      "output_changed": false
+    }
+  ],
+  "console_errors": [],
+  "page_errors": [],
+  "findings": [
+    "No obvious search input found on home for SafeBrowser-style discovery.",
+    "Home exposes many anchor links; SafeBrowser cannot click <a> tags.",
+    "Home SafeBrowser-like controls do not expose an obvious Base64 button; navigation likely requires links or search+link.",
+    "Evaluator reached Base64 UI at http://127.0.0.1:8010/base64-string-converter."
+  ],
+  "base64_link_candidates": [],
+  "reversex_action_surface": {
+    "supported_actions": [
+      "observe",
+      "click",
+      "fill",
+      "reload",
+      "stop"
+    ],
+    "discoverable_controls": [
+      "button",
+      "input",
+      "textarea",
+      "select"
+    ],
+    "not_clickable_by_safe_browser": [
+      "a (anchor/router links)",
+      "div role=button unless button tag",
+      "contenteditable"
+    ]
+  }
+}

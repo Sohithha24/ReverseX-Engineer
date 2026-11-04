@@ -1,0 +1,27 @@
+﻿{
+    "ittools":  200,
+    "react":  200,
+    "publicReject":  "{\"detail\":\"Only http://127.0.0.1 URLs on approved ports are allowed\"}",
+    "api":  {
+                "status":  "ok",
+                "phase":  "5c",
+                "reconstruction_available":  true,
+                "validation_available":  true,
+                "docker_required_for_validation_preview":  true,
+                "public":  false,
+                "authorized_targets":  [
+                                           "calculator",
+                                           "contactpad",
+                                           "it-tools",
+                                           "taskboard"
+                                       ],
+                "authorized_origins":  [
+                                           "http://127.0.0.1:8003",
+                                           "http://127.0.0.1:8005",
+                                           "http://127.0.0.1:8010",
+                                           "http://127.0.0.1:8001"
+                                       ],
+                "note":  "Local-only API. Not authenticated. Custom URLs must match the origin allowlist."
+            },
+    "targets":  "{\r\n    \"targets\":  [\r\n                    {\r\n                        \"id\":  \"calculator\",\r\n                        \"label\":  \"MiniCalc\",\r\n                        \"origin\":  \"http://127.0.0.1:8003\",\r\n                        \"description\":  \"MiniCalc visible arithmetic behavior\",\r\n                        \"validation_suite\":  \"calculator\",\r\n                        \"reuse_reconstruction_allowed\":  false,\r\n                        \"kind\":  \"fixture\",\r\n                        \"independent_validation_available\":  true\r\n                    },\r\n                    {\r\n                        \"id\":  \"contactpad\",\r\n                        \"label\":  \"ContactPad\",\r\n                        \"origin\":  \"http://127.0.0.1:8005\",\r\n                        \"description\":  \"Submit a contact message and view confirmation\",\r\n                        \"validation_suite\":  null,\r\n                        \"reuse_reconstruction_allowed\":  false,\r\n                        \"kind\":  \"allowlisted_custom\",\r\n                        \"independent_validation_available\":  false\r\n                    },\r\n                    {\r\n                        \"id\":  \"it-tools\",\r\n                        \"label\":  \"IT-Tools\",\r\n                        \"origin\":  \"http://127.0.0.1:8010\",\r\n                        \"description\":  \"Base64 text encoding and decoding\",\r\n                        \"validation_suite\":  null,\r\n                        \"reuse_reconstruction_allowed\":  false,\r\n                        \"kind\":  \"allowlisted_custom\",\r\n                        \"independent_validation_available\":  false\r\n                    },\r\n                    {\r\n                        \"id\":  \"taskboard\",\r\n                        \"label\":  \"TaskBoard\",\r\n                        \"origin\":  \"http://127.0.0.1:8001\",\r\n                        \"description\":  \"Add task / TaskBoard visible behavior\",\r\n                        \"validation_suite\":  \"taskboard\",\r\n                        \"reuse_reconstruction_allowed\":  true,\r\n                        \"kind\":  \"fixture\",\r\n                        \"independent_validation_available\":  true\r\n                    }\r\n                ],\r\n    \"authorized_origins\":  [\r\n                               {\r\n                                   \"target_id\":  \"calculator\",\r\n                                   \"label\":  \"MiniCalc\",\r\n                                   \"origin\":  \"http://127.0.0.1:8003\",\r\n                                   \"validation_available\":  true,\r\n                                   \"kind\":  \"fixture\"\r\n                               },\r\n                               {\r\n                                   \"target_id\":  \"contactpad\",\r\n                                   \"label\":  \"ContactPad\",\r\n                                   \"origin\":  \"http://127.0.0.1:8005\",\r\n                                   \"validation_available\":  false,\r\n                                   \"kind\":  \"allowlisted_custom\"\r\n                               },\r\n                               {\r\n                                   \"target_id\":  \"it-tools\",\r\n                                   \"label\":  \"IT-Tools\",\r\n                                   \"origin\":  \"http://127.0.0.1:8010\",\r\n                                   \"validation_available\":  false,\r\n                                   \"kind\":  \"allowlisted_custom\"\r\n                               },\r\n                               {\r\n                                   \"target_id\":  \"taskboard\",\r\n                                   \"label\":  \"TaskBoard\",\r\n                                   \"origin\":  \"http://127.0.0.1:8001\",\r\n                                   \"validation_available\":  true,\r\n                                   \"kind\":  \"fixture\"\r\n                               }\r\n                           ]\r\n}"
+}

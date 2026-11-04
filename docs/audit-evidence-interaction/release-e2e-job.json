@@ -1,0 +1,89 @@
+﻿{
+    "id":  "8307f8d9aa304926b57f91de7171bc9a",
+    "status":  "completed",
+    "mode":  "scripted",
+    "pipeline":  "full",
+    "target_id":  "taskboard",
+    "feature":  "Add task / TaskBoard visible behavior",
+    "application_url":  "http://127.0.0.1:8001/",
+    "investigation_goal":  "understand_and_reconstruct",
+    "queued_at":  "2026-11-04T21:04:00.151743+00:00",
+    "updated_at":  "2026-11-04T21:04:58.529144+00:00",
+    "stages":  {
+                   "investigation":  {
+                                         "executed":  true,
+                                         "status":  "completed",
+                                         "artifact":  "8307f8d9aa304926b57f91de7171bc9a/investigation/report.json",
+                                         "duration_seconds":  6.79,
+                                         "api_request_count":  0,
+                                         "target_id":  "taskboard",
+                                         "feature":  "Add task / TaskBoard visible behavior",
+                                         "application_url":  "http://127.0.0.1:8001/"
+                                     },
+                   "specification":  {
+                                         "executed":  true,
+                                         "status":  "frozen",
+                                         "artifact":  "8307f8d9aa304926b57f91de7171bc9a/specification/behavior_spec.frozen.json",
+                                         "observation_requirements":  [
+                                                                          "REQ-EMPTY-SUBMIT",
+                                                                          "REQ-VALID-CREATE",
+                                                                          "REQ-RELOAD-PERSIST"
+                                                                      ]
+                                     },
+                   "reconstruction":  {
+                                          "executed":  true,
+                                          "status":  "reused",
+                                          "artifact":  "8307f8d9aa304926b57f91de7171bc9a/reconstructed-app/",
+                                          "files":  [
+                                                        "index.html",
+                                                        "script.js",
+                                                        "style.css"
+                                                    ],
+                                          "meta_api_requests":  0,
+                                          "note":  "Reused existing Phase 2 reconstruction; did not overwrite artifacts/phase2/reconstructed-app"
+                                      },
+                   "validation":  {
+                                      "executed":  true,
+                                      "status":  "completed",
+                                      "artifact":  "8307f8d9aa304926b57f91de7171bc9a/validation/validation_results.json",
+                                      "passed":  5,
+                                      "failed":  0,
+                                      "invalid":  0,
+                                      "total_valid":  5,
+                                      "behavioral_match_rate_percent":  100.0,
+                                      "isolation":  {
+                                                        "status":  "running",
+                                                        "reason":  "Serving reconstructed app in read-only nginx container (bridge). No .env, no docker.sock, loopback bind only.",
+                                                        "url":  "http://127.0.0.1:8002/",
+                                                        "isolation":  "docker_nginx_readonly_bridge",
+                                                        "container":  "reversex-phase2-preview",
+                                                        "network":  "bridge",
+                                                        "files_ready":  true,
+                                                        "limitations":  [
+                                                                            "Treat generated JS as untrusted; browser allowlist still required.",
+                                                                            "This is stronger than bare host http.server but not a full OS sandbox.",
+                                                                            "Internal network container started but loopback HTTP not ready (\u003curlopen error timed out\u003e); falling back to bridge with the same filesystem/capability restrictions.",
+                                                                            "Bridge network may allow container DNS/outbound; browser request filtering is mandatory.",
+                                                                            "Not a full browser/OS exploit sandbox."
+                                                                        ]
+                                                    },
+                                      "meta_api_requests":  0,
+                                      "suite":  "taskboard"
+                                  },
+                   "repair":  {
+                                  "executed":  false,
+                                  "status":  "skipped",
+                                  "note":  "No failed validation scenarios â repair not invoked"
+                              }
+               },
+    "errors":  [
+
+               ],
+    "artifacts":  {
+                      "root":  "artifacts/8307f8d9aa304926b57f91de7171bc9a/",
+                      "evidence_graph":  "8307f8d9aa304926b57f91de7171bc9a/evidence_graph.json",
+                      "report":  "8307f8d9aa304926b57f91de7171bc9a/final_report.json"
+                  },
+    "meta_api_requests_total":  0,
+    "error":  null
+}

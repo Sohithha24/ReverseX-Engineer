@@ -1,0 +1,92 @@
+1
+00:00:00,000 --> 00:00:11,174
+ReverseX Engineer is an AI-powered software investigation platform that explores how application features behave, reconstructs them, and independently verifies the results.
+
+2
+00:00:11,174 --> 00:00:17,411
+It works against authorized local demo applications—not arbitrary websites on the open internet.
+
+3
+00:00:17,411 --> 00:00:22,608
+This short walkthrough uses verified local results from a completed Guided Demo.
+
+4
+00:00:22,958 --> 00:00:29,092
+A user selects an allowlisted application—here, TaskBoard—and chooses Understand and Reconstruct.
+
+5
+00:00:29,092 --> 00:00:39,400
+For this demonstration we open a Guided Demo investigation that was already completed and verified, rather than starting a new live Meta Muse run during recording.
+
+6
+00:00:39,400 --> 00:00:50,404
+In Muse mode, the agent can choose browser interactions such as fill, click, and reload, while ReverseX records observations into an evidence-backed behavioral specification.
+
+7
+00:00:50,404 --> 00:01:00,902
+The job on screen ran in Guided Demo mode with zero Meta API requests in that release pass, so you can trust the stages without paying for a fresh Muse investigation.
+
+8
+00:01:01,252 --> 00:01:10,088
+From the frozen behavior specification, ReverseX produces an independent implementation as static files—HTML, JavaScript, and CSS.
+
+9
+00:01:10,088 --> 00:01:14,233
+The original TaskBoard source never enters the model context.
+
+10
+00:01:14,233 --> 00:01:19,943
+In this verified run, reconstruction was reused from an existing Phase Two artifact.
+
+11
+00:01:19,943 --> 00:01:32,788
+We are therefore showing prior reconstruction evidence and status labels from that completed job, not implying that new reconstruction files were generated live during this video recording.
+
+12
+00:01:33,138 --> 00:01:40,171
+ReverseX then compares the original application with the reconstruction using independent behavioral tests.
+
+13
+00:01:40,171 --> 00:01:46,284
+Playwright exercises holdout scenarios against both sides so the model does not grade itself.
+
+14
+00:01:46,284 --> 00:01:52,397
+For TaskBoard, five of five scenarios passed—a one hundred percent match on the tested cases.
+
+15
+00:01:52,397 --> 00:01:58,050
+That score applies to those scenarios, not every possible behavior of the application.
+
+16
+00:01:58,400 --> 00:02:07,217
+The Simple Report explains the investigation in plain language for nontechnical readers—what was tested, what matched, and key limits.
+
+17
+00:02:07,217 --> 00:02:16,232
+Switching to the Developer Report keeps the same verified findings, and adds technical observations, stage details, and testing evidence.
+
+18
+00:02:16,232 --> 00:02:22,088
+Both reports draw from one completed investigation record, so the story stays consistent.
+
+19
+00:02:22,438 --> 00:02:27,123
+Next is the Controlled Repair Example—a labeled fault-injection evaluation.
+
+20
+00:02:27,123 --> 00:02:36,556
+A deliberate defect was introduced into a reconstruction copy, detected by the oracle, then corrected through a bounded repair attempt and revalidated.
+
+21
+00:02:36,556 --> 00:02:44,614
+This is separate from the TaskBoard investigation you just reviewed, and it is not an organic AI failure from that completed job.
+
+22
+00:02:44,964 --> 00:02:54,083
+ReverseX demonstrates investigate, reconstruct, independently validate, and controlled repair—with evidence you can audit.
+
+23
+00:02:54,083 --> 00:02:55,428
+ReverseX Engineer.
+

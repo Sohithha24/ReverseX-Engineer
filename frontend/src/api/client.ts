@@ -3,12 +3,15 @@ import type {
   EvidenceGraph,
   EventsResponse,
   HealthResponse,
+  HumanReportResponse,
   InvestigationSummary,
   RepairReport,
+  ResolveTargetResponse,
   ResultsResponse,
   ScreenshotsResponse,
   TargetsResponse,
   ValidationResultsFile,
+  VerifiedResults,
 } from './types'
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000'
@@ -43,11 +46,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<HealthResponse>('/health'),
   listTargets: () => request<TargetsResponse>('/api/targets'),
+  resolveTarget: (body: { application_url: string; feature?: string }) =>
+    request<ResolveTargetResponse>('/api/targets/resolve', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   createInvestigation: (body: CreateInvestigationRequest) =>
     request<InvestigationSummary>('/api/investigations', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  listInvestigations: (limit = 40) =>
+    request<{ investigations: InvestigationSummary[]; count: number; note?: string }>(
+      `/api/investigations?limit=${encodeURIComponent(String(limit))}`,
+    ),
   getInvestigation: (id: string) =>
     request<InvestigationSummary>(`/api/investigations/${id}`),
   getEvents: (id: string) =>
@@ -68,6 +80,14 @@ export const api = {
     request<ValidationResultsFile>(`/api/investigations/${id}/validation`),
   getRepair: (id: string) =>
     request<RepairReport>(`/api/investigations/${id}/repair`),
+  getVerifiedFindings: (id: string) =>
+    request<VerifiedResults>(`/api/investigations/${id}/verified-findings`),
+  getHumanReport: (id: string) =>
+    request<HumanReportResponse>(`/api/investigations/${id}/human-report`),
+  simpleReportUrl: (id: string) =>
+    `${apiBaseUrl()}/api/investigations/${id}/reports/simple.md`,
+  developerReportUrl: (id: string) =>
+    `${apiBaseUrl()}/api/investigations/${id}/reports/developer.md`,
   screenshotUrl: (id: string, filename: string) =>
     `${apiBaseUrl()}/api/investigations/${id}/screenshots/${encodeURIComponent(filename)}`,
 }

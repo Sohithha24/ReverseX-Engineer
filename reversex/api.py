@@ -11,12 +11,20 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from reversex.evidence_graph import EvidenceGraph, build_evidence_graph, export_evidence_graph
 from reversex.orchestrate import run_pipeline
-from reversex.targets import TARGETS, list_target_ids
+from reversex.reporting import STATUS_HELP, STATUS_LABELS, build_report_package
+from reversex.targets import (
+    TARGETS,
+    TargetAuthorizationError,
+    list_authorized_origins,
+    list_target_ids,
+    resolve_authorized_application,
+)
+from reversex.verification import VerifiedResults, build_verified_results
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / 'artifacts'
@@ -56,7 +64,10 @@ class CreateInvestigation(BaseModel):
     pipeline: Literal['investigate_only', 'full'] = 'full'
     reuse_reconstruction: bool = True
     max_actions: int = Field(default=10, ge=1, le=20)
-    target_id: Literal['taskboard', 'calculator'] = 'taskboard'
+    target_id: str | None = None
+    application_url: str | None = Field(default=None, max_length=300)
+    feature: str | None = Field(default=None, max_length=240)
+    investigation_goal: Literal['understand', 'understand_and_reconstruct'] = 'understand_and_reconstruct'
 
     @field_validator('mode')
     @classmethod
@@ -64,6 +75,29 @@ class CreateInvestigation(BaseModel):
         if value not in ('scripted', 'muse'):
             raise ValueError('mode must be scripted or muse')
         return value
+
+    @field_validator('feature')
+    @classmethod
+    def feature_ok(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator('application_url')
+    @classmethod
+    def application_url_ok(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ResolveTargetRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    application_url: str = Field(min_length=1, max_length=300)
+    feature: str | None = Field(default=None, max_length=240)
 
 
 class InvestigationSummary(BaseModel):
@@ -74,6 +108,9 @@ class InvestigationSummary(BaseModel):
     mode: str | None = None
     pipeline: str | None = None
     target_id: str | None = None
+    feature: str | None = None
+    application_url: str | None = None
+    investigation_goal: str | None = None
     queued_at: str | None = None
     updated_at: str | None = None
     stages: dict[str, Any] = Field(default_factory=dict)
@@ -106,10 +143,53 @@ def _get_job(job_id: str) -> dict[str, Any]:
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
     """Strip non-serializable / sensitive fields for API responses."""
     allowed = {
-        'id', 'status', 'mode', 'pipeline', 'target_id', 'updated_at', 'stages', 'errors',
+        'id', 'status', 'mode', 'pipeline', 'target_id', 'feature', 'application_url',
+        'investigation_goal', 'updated_at', 'stages', 'errors',
         'artifacts', 'meta_api_requests_total', 'error', 'queued_at',
     }
     return {k: job[k] for k in allowed if k in job}
+
+
+def _disk_job_summary(job_id: str) -> dict[str, Any] | None:
+    """Load a finalized investigation summary from artifacts (survives API restart)."""
+    if not JOB_ID_RE.match(job_id):
+        return None
+    disk = ARTIFACTS / job_id / 'final_report.json'
+    if not disk.is_file():
+        return None
+    try:
+        data = json.loads(disk.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    summary = _public_job({**data, 'id': job_id})
+    summary.setdefault('id', job_id)
+    return summary
+
+
+def _list_investigation_summaries(*, limit: int = 40) -> list[dict[str, Any]]:
+    """Merge in-memory jobs with on-disk final reports for durable history."""
+    limit = max(1, min(int(limit), 100))
+    by_id: dict[str, dict[str, Any]] = {}
+    with _lock:
+        for job_id, job in _jobs.items():
+            by_id[job_id] = _public_job(job)
+    if ARTIFACTS.is_dir():
+        for child in ARTIFACTS.iterdir():
+            if not child.is_dir() or not JOB_ID_RE.match(child.name):
+                continue
+            if child.name in by_id:
+                continue
+            summary = _disk_job_summary(child.name)
+            if summary:
+                by_id[child.name] = summary
+
+    def sort_key(item: dict[str, Any]) -> str:
+        return str(item.get('updated_at') or item.get('queued_at') or '')
+
+    ordered = sorted(by_id.values(), key=sort_key, reverse=True)
+    return ordered[:limit]
 
 
 def _read_json_artifact(job_id: str, *parts: str) -> Any:
@@ -136,7 +216,8 @@ def health():
         'docker_required_for_validation_preview': True,
         'public': False,
         'authorized_targets': list_target_ids(),
-        'note': 'Local-only API. Not authenticated.',
+        'authorized_origins': [o['origin'] for o in list_authorized_origins()],
+        'note': 'Local-only API. Not authenticated. Custom URLs must match the origin allowlist.',
     }
 
 
@@ -148,17 +229,80 @@ def get_targets():
         t = TARGETS[tid]
         items.append({
             'id': t.id,
-            'label': 'TaskBoard' if t.id == 'taskboard' else 'MiniCalc',
+            'label': t.label or t.id,
             'origin': t.origin,
             'description': t.feature_label,
             'validation_suite': t.validation_suite,
-            'reuse_reconstruction_allowed': t.id == 'taskboard',
+            'reuse_reconstruction_allowed': bool(t.supports_reconstruction_reuse),
+            'kind': t.kind,
+            'independent_validation_available': bool(
+                t.supports_independent_validation and t.validation_suite
+            ),
         })
-    return {'targets': items}
+    return {'targets': items, 'authorized_origins': list_authorized_origins()}
+
+
+@app.post('/api/targets/resolve')
+def resolve_target(payload: ResolveTargetRequest):
+    """Check whether a user-entered URL is an approved local application."""
+    try:
+        target, start_url = resolve_authorized_application(
+            application_url=payload.application_url,
+            feature=payload.feature,
+        )
+    except TargetAuthorizationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        'approved': True,
+        'target_id': target.id,
+        'label': target.label or target.id,
+        'origin': target.origin,
+        'application_url': start_url,
+        'feature': target.feature_label,
+        'kind': target.kind,
+        'independent_validation_available': bool(
+            target.supports_independent_validation and target.validation_suite
+        ),
+        'message': 'Application URL is approved for local investigation.',
+    }
+
+
+@app.get('/api/investigations')
+def list_investigations(limit: int = 40):
+    """List recent investigations from memory and durable artifact folders."""
+    items = _list_investigation_summaries(limit=limit)
+    return {
+        'investigations': items,
+        'count': len(items),
+        'note': (
+            'Completed jobs are listed from local artifacts/ and survive API restarts. '
+            'In-progress jobs appear only while this API process is running.'
+        ),
+    }
 
 
 @app.post('/api/investigations', response_model=InvestigationSummary)
 def create_investigation(payload: CreateInvestigation):
+    if not payload.application_url and not payload.target_id:
+        raise HTTPException(
+            status_code=400,
+            detail='Provide an approved application_url or a sample target_id.',
+        )
+    try:
+        target, start_url = resolve_authorized_application(
+            application_url=payload.application_url,
+            target_id=payload.target_id,
+            feature=payload.feature,
+        )
+    except TargetAuthorizationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    effective_pipeline = (
+        'investigate_only'
+        if payload.investigation_goal == 'understand'
+        else payload.pipeline
+    )
+
     with _lock:
         if any(job.get('status') in ACTIVE for job in _jobs.values()):
             raise HTTPException(status_code=409, detail='Only one investigation may run at a time')
@@ -167,8 +311,11 @@ def create_investigation(payload: CreateInvestigation):
             'id': job_id,
             'status': 'queued',
             'mode': payload.mode,
-            'pipeline': payload.pipeline,
-            'target_id': payload.target_id,
+            'pipeline': effective_pipeline,
+            'target_id': target.id,
+            'feature': target.feature_label,
+            'application_url': start_url,
+            'investigation_goal': payload.investigation_goal,
             'queued_at': None,
             'stages': {},
             'errors': [],
@@ -180,28 +327,31 @@ def create_investigation(payload: CreateInvestigation):
         _jobs[job_id] = job
 
     def work():
-        def status_cb(status, payload):
+        def status_cb(status, payload_status):
             with _lock:
                 current = _jobs.get(job_id)
                 if not current:
                     return
                 current['status'] = status
-                current['updated_at'] = payload.get('updated_at')
-                if 'stages' in payload:
-                    current['stages'] = payload['stages']
-                if 'errors' in payload:
-                    current['errors'] = payload['errors']
+                current['updated_at'] = payload_status.get('updated_at')
+                if 'stages' in payload_status:
+                    current['stages'] = payload_status['stages']
+                if 'errors' in payload_status:
+                    current['errors'] = payload_status['errors']
 
         try:
             summary = run_pipeline(
                 job_id=job_id,
                 mode=payload.mode,
-                pipeline=payload.pipeline,
+                pipeline=effective_pipeline,
                 reuse_reconstruction=payload.reuse_reconstruction,
                 max_actions=payload.max_actions,
                 artifacts_root=ARTIFACTS,
                 status_cb=status_cb,
-                target_id=payload.target_id,
+                target_id=target.id,
+                application_url=start_url,
+                feature=payload.feature or target.feature_label,
+                investigation_goal=payload.investigation_goal,
             )
             with _lock:
                 _jobs[job_id].update(summary)
@@ -331,6 +481,89 @@ def get_report(job_id: str):
             'errors': job.get('errors') or job.get('error') and [job.get('error')] or [],
             'note': 'Final report not written yet; returning live job summary',
         }
+
+
+@app.get('/api/investigations/{job_id}/verified-findings', response_model=VerifiedResults)
+def get_verified_findings(job_id: str):
+    """Read-only evidence verification over recorded artifacts (no Meta/Muse calls)."""
+    _get_job(job_id)
+    results = build_verified_results(ARTIFACTS, job_id)
+    if results.availability == 'unavailable':
+        raise HTTPException(
+            status_code=404,
+            detail=results.notes[0] if results.notes else 'Verified findings unavailable',
+        )
+    return results
+
+
+@app.get('/api/investigations/{job_id}/human-report')
+def get_human_report(job_id: str):
+    """Shared narrative package for Simple/Developer UI (same VerifiedResults)."""
+    _get_job(job_id)
+    try:
+        package = build_report_package(ARTIFACTS, job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    verified: VerifiedResults = package['verified']
+    if verified.availability == 'unavailable':
+        raise HTTPException(
+            status_code=404,
+            detail=verified.notes[0] if verified.notes else 'Report unavailable',
+        )
+    return {
+        'verified': verified.model_dump(mode='json'),
+        'timeline': package['timeline'],
+        'failures': package['failures'],
+        'how_we_know': package['how_we_know'],
+        'status_labels': STATUS_LABELS,
+        'status_help': STATUS_HELP,
+        'investigation_note': (package.get('investigation_report') or {}).get('note'),
+        'api_request_count': (package.get('investigation_report') or {}).get('api_request_count'),
+        'specification_present': package.get('behavior_spec') is not None,
+        'requirements': [
+            {
+                'id': r.get('id'),
+                'kind': r.get('kind'),
+                'observed_result': r.get('observed_result'),
+                'action_performed': r.get('action_performed'),
+            }
+            for r in ((package.get('behavior_spec') or {}).get('requirements') or [])
+        ],
+    }
+
+
+@app.get('/api/investigations/{job_id}/reports/simple.md')
+def download_simple_report(job_id: str):
+    _get_job(job_id)
+    package = build_report_package(ARTIFACTS, job_id)
+    verified: VerifiedResults = package['verified']
+    if verified.availability == 'unavailable':
+        raise HTTPException(status_code=404, detail='Simple report unavailable')
+    body = package['simple_markdown']
+    return Response(
+        content=body,
+        media_type='text/markdown; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="reversex-{job_id}-simple.md"',
+        },
+    )
+
+
+@app.get('/api/investigations/{job_id}/reports/developer.md')
+def download_developer_report(job_id: str):
+    _get_job(job_id)
+    package = build_report_package(ARTIFACTS, job_id)
+    verified: VerifiedResults = package['verified']
+    if verified.availability == 'unavailable':
+        raise HTTPException(status_code=404, detail='Developer report unavailable')
+    body = package['developer_markdown']
+    return Response(
+        content=body,
+        media_type='text/markdown; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="reversex-{job_id}-developer.md"',
+        },
+    )
 
 
 @app.get('/api/demo/evidence-graph', response_model=EvidenceGraph)
